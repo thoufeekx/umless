@@ -1,64 +1,66 @@
+<p align="center"><img src="docs/demo.gif" alt="A 39-second first take with 9 ums, 6 stutters and a retake, cut by Umless to 17 seconds" width="720"></p>
+
 # Umless
 
-Your video, minus the ums. Upload a demo or talking video; get back a clean take with no ums, stutters, retakes or dead air. Optionally re-voiced from a polished script.
+**Record once, post today.** Umless is an open-source command-line tool that cuts ums, stutters, retakes and dead air out of talking-head video and demo recordings. On our test take it turned **39.4 s into 17.5 s**: 9 ums, 6 stutters and one "let me say that again" removed, with no clicks at the cuts.
 
-Plan, GTM and scripts: https://claude.ai/artifact/Ku3wPLFtBDZH5M75ePvSFR
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Hosted version](https://umless.thoufeekxlabs.com/?ref=github) · [Report a bad cut](https://github.com/thoufeekx/umless/issues/new)
 
-## Run
+If Umless saves you an editing session, a ⭐ helps other people find it.
 
-```bash
-npm install
-npm run build && npm start   # http://localhost:3210
-```
+## Quick start
 
-Needs `ffmpeg` on the PATH and `AudioBet/.env` with `OPENROUTER_API_KEY` (all AI calls) and `ADMIN_KEY` (dashboard).
-The current OpenRouter key is borrowed from `YourBrandOnSaasYearbook/.env.local` and must be replaced (see `.env` header).
-
-## Pages
-
-- `/` landing, pricing, two-step waitlist with referral links (rows go to `data/waitlist.jsonl`)
-- `/admin?key=<ADMIN_KEY>` funnel dashboard; `/api/digest?key=<ADMIN_KEY>` plain-text digest (events in `data/events.jsonl`)
-- `/um-score` free Um Score tool with a shareable X card
-- `/studio` Clean Cut, Studio Sound, Re-voice
-- `/remove-filler-words-from-video` and 5 more SEO pages (`lib/seo.ts`)
-
-## Engine (`lib/pipeline.ts`), all through OpenRouter
-
-1. AssemblyAI Universal-3.6 Pro transcribes word by word (keeps every "um"; Whisper, Deepgram and Grok drop them).
-2. Rules mark fillers and repeated phrases; gpt-5-mini marks retakes and false starts.
-3. ffmpeg cuts the kept segments, each boundary snapped to the quietest 10 ms nearby, with 15 ms fades; long pauses shrink to 0.25 s.
-4. Studio Sound: local ffmpeg denoise + compression + loudness normalisation (free).
-5. Re-voice: gpt-5-mini polishes each sentence; HeyGen Voice (stateless clone from a 15 s sample of the speaker, free tier first)
-   or a Gemini stock voice speaks it; each video segment is stretched to fit its new line.
-
-Cost: about $0.03 for a 3-minute Re-voice. Override models with `UMLESS_STT_MODEL` / `UMLESS_LLM_MODEL`.
-
-## CLI (open-source bait)
+You need Node 20+, `ffmpeg` on your PATH and an [OpenRouter key](https://openrouter.ai/keys). A 3-minute video costs about $0.02 in API calls.
 
 ```bash
-OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-demo.mp4          # writes my-demo.umless.mp4
-OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-demo.mp4 --score  # just the Um Score
+git clone https://github.com/thoufeekx/umless && cd umless && npm install
+OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4          # writes my-video.umless.mp4
+OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4 --score  # Um Score only, no render
 ```
 
-## Test data
+The terminal prints an Um Score (ums per minute, stutters and retakes, seconds of dead air), your transcript with every cut word struck through, and the before/after length. Audio files work too and come out as `.m4a`.
 
-`testdata/demo_raw.mp4` is a synthetic 39 s take with 9 ums, 6 stutters and a retake.
-`testdata/walkthrough_raw.mp4` is the same take over screenshots of the app (source of the site's demo clips).
-`npm run pipeline -- testdata/walkthrough_raw.mp4 revoice` runs every stage and caches the transcript.
+## What it cuts
 
-## Marketing
+- **Filler words:** um, uh, er and similar. The transcriber keeps every "um" (many speech-to-text models silently drop them).
+- **Stutters and repeated phrases:** "the the", "so so so".
+- **Retakes and false starts:** say a sentence twice and it keeps the last clean one.
+- **Dead air:** long pauses shrink to a natural 0.25 s.
+- **Clean cuts:** every boundary snaps to the quietest 10 ms nearby, with 15 ms fades, so you don't hear clicks.
 
-`marketing/umless-demo-x.mp4` is the 40 s before/after video for X.
+## How it works
 
-## Research
+1. `ffmpeg` pulls the audio track.
+2. AssemblyAI Universal (through OpenRouter) transcribes it word by word with timings.
+3. Rules mark fillers and repeats, and an LLM (`gpt-5-mini` by default) marks retakes and false starts.
+4. `ffmpeg` renders the kept segments into a new file.
 
-`research/demand.md`, `research/nevo-playbook.md`, `research/trustmrr.md`.
+Change the models with `UMLESS_STT_MODEL` and `UMLESS_LLM_MODEL`. The pipeline is in [`lib/pipeline.ts`](lib/pipeline.ts) and the CLI in [`cli/umless.ts`](cli/umless.ts).
 
-## Deploy (Linux Lite laptop, ssh alias `umless-box`, Tailscale 100.98.47.6)
+To try it before using your own footage, run it on `testdata/demo_raw.mp4`, a 39 s take with 9 ums, 6 stutters and a retake.
 
-- `scripts/deploy.sh staging` pushes this Mac's code to staging: private, http://100.98.47.6:3210 (Tailscale only).
-- `scripts/deploy.sh prod` promotes exactly what staging runs to prod: public, https://umless-app.thoufeekxlabs.com. The landing page at umless.thoufeekxlabs.com is the laptop session's Cloudflare Worker.
-- `deploy/go-public.sh` (once) creates prod's Cloudflare tunnel + DNS, then promotes.
-- Each env: `/opt/umless-<env>` (code, `.env`, compose), its own image tag, data volume and admin key.
-  Rollback: `docker tag umless-app:<env>-previous umless-app:<env> && docker compose up -d` in that folder.
-- Remove everything: `bash /opt/umless-staging/uninstall.sh`.
+## Why open source
+
+Most filler-word removers are closed. You can't see why a word was cut, and you pay per minute forever. With Umless you can read every rule, change the thresholds and run it in your own scripts and pipelines.
+
+## Don't want a terminal?
+
+- **[Umless hosted](https://umless.thoufeekxlabs.com/?ref=github):** upload in the browser, plus Studio Sound and re-voicing a clean script in your own voice. Join the waitlist.
+- **[Done-for-you](https://umless.thoufeekxlabs.com/?ref=github):** send raw recordings and get finished edits back. Your first cleanup is free.
+
+## Roadmap
+
+- `npx umless`, with no clone needed
+- Timeline export (FCPXML / EDL) so you can finish in Premiere, Resolve, Final Cut or Kdenlive
+- A `--json` cut list and an MCP server for agents and automation pipelines
+- A local transcription option (whisper.cpp)
+
+Want one of these sooner? Open an issue or send a PR.
+
+## Contributing
+
+Issues and PRs are welcome. If Umless cut something it shouldn't have, open an issue with the command you ran and the struck-through transcript it printed. Development and deploy notes for the hosted app are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+## License
+
+MIT © 2026 ThoufeekX Labs
