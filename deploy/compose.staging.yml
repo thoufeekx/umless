@@ -1,0 +1,33 @@
+# Umless on a shared server. Self-contained: own project, network and volume, no published ports (traffic
+# arrives through its own Cloudflare tunnel), hard CPU/memory caps and capped logs.
+# Everything here carries the label com.umless=1 so uninstall.sh can remove exactly this and nothing else.
+name: umless-staging
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "2"}
+
+services:
+  web:
+    image: umless-app:staging
+    env_file: [.env]
+    volumes: [data:/app/data]  # waitlist, events and 24-hour job files
+    ports: ["100.98.47.6:3210:3210"]  # staging: private, Tailscale only
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3210/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.5  # ffmpeg renders are the heavy part
+    labels: {com.umless: "1", com.umless.env: staging}
+    <<: *logs
+
+
+volumes:
+  data: {labels: {com.umless: "1", com.umless.env: staging}}
+
+networks:
+  default: {labels: {com.umless: "1", com.umless.env: staging}}

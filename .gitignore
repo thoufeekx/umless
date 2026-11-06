@@ -1,0 +1,7 @@
+node_modules
+.next
+.env
+data
+testdata/out
+.env.server
+research/trustmrr.md

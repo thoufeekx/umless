@@ -1,0 +1,8 @@
+file 'p1.wav'
+file 'sil.wav'
+file 'p2.wav'
+file 'p3.wav'
+file 'sil.wav'
+file 'sil.wav'
+file 'p4.wav'
+file 'p5.wav'

@@ -1,0 +1,42 @@
+# Umless on a shared server. Self-contained: own project, network and volume, no published ports (traffic
+# arrives through its own Cloudflare tunnel), hard CPU/memory caps and capped logs.
+# Everything here carries the label com.umless=1 so uninstall.sh can remove exactly this and nothing else.
+name: umless-prod
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "2"}
+
+services:
+  web:
+    image: umless-app:prod
+    env_file: [.env]
+    volumes: [data:/app/data]  # waitlist, events and 24-hour job files
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3210/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.5  # ffmpeg renders are the heavy part
+    labels: {com.umless: "1", com.umless.env: prod}
+    <<: *logs
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.2
+    command: ["tunnel", "--config", "/etc/cloudflared/config.yml", "run"]
+    volumes: [./cloudflared:/etc/cloudflared:ro]
+    depends_on: [web]
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.1
+    labels: {com.umless: "1", com.umless.env: prod}
+    <<: *logs
+
+volumes:
+  data: {labels: {com.umless: "1", com.umless.env: prod}}
+
+networks:
+  default: {labels: {com.umless: "1", com.umless.env: prod}}
