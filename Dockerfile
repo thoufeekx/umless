@@ -8,7 +8,8 @@ RUN npm ci
 COPY . .
 ARG NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL NEXT_TELEMETRY_DISABLED=1
-RUN npm run build && npm prune --omit=dev
+# next/react are devDependencies (so `npx umless` does not install them), so the image keeps dev deps.
+RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3210
 CMD ["npm", "start"]

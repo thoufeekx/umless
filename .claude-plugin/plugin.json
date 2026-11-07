@@ -1,0 +1,18 @@
+{
+  "name": "umless",
+  "version": "0.1.0",
+  "description": "Cut ums, stutters, retakes and dead air out of talking-head videos. Adds the umless skill and the umless MCP server (analyze_video, clean_video).",
+  "author": { "name": "ThoufeekX Labs", "url": "https://github.com/thoufeekx" },
+  "homepage": "https://github.com/thoufeekx/umless",
+  "repository": "https://github.com/thoufeekx/umless",
+  "license": "MIT",
+  "keywords": ["video", "filler-words", "silence-removal", "ffmpeg", "talking-head"],
+  "skills": "./skills/",
+  "mcpServers": {
+    "umless": {
+      "command": "npx",
+      "args": ["-y", "github:thoufeekx/umless", "mcp"],
+      "env": { "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}" }
+    }
+  }
+}

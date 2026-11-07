@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.thoufeekx/umless",
+  "title": "Umless",
+  "description": "Cut ums, stutters, retakes and dead air out of talking-head videos. Returns cut lists or renders.",
+  "repository": { "url": "https://github.com/thoufeekx/umless", "source": "github" },
+  "websiteUrl": "https://github.com/thoufeekx/umless",
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "umless",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "packageArguments": [{ "type": "positional", "value": "mcp" }],
+      "environmentVariables": [
+        { "name": "OPENROUTER_API_KEY", "description": "OpenRouter API key used for transcription and retake detection", "isRequired": true, "isSecret": true }
+      ]
+    }
+  ]
+}

@@ -6,3 +6,5 @@ testdata/out
 .env.server
 research/trustmrr.md
 research/trustmrr-raw/
+dist
+*.tgz
