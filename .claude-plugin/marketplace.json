@@ -1,0 +1,12 @@
+{
+  "name": "umless",
+  "owner": { "name": "ThoufeekX Labs", "url": "https://github.com/thoufeekx" },
+  "plugins": [
+    {
+      "name": "umless",
+      "source": "./",
+      "description": "Cut ums, stutters, retakes and dead air out of talking-head videos (skill + MCP server).",
+      "category": "media"
+    }
+  ]
+}

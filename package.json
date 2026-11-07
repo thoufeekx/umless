@@ -1,22 +1,62 @@
 {
   "name": "umless",
-  "private": true,
   "version": "0.1.0",
+  "description": "Cut ums, stutters, retakes and dead air out of talking-head videos. CLI + MCP server for AI agents.",
+  "keywords": [
+    "video",
+    "filler-words",
+    "um",
+    "silence-removal",
+    "talking-head",
+    "ffmpeg",
+    "mcp",
+    "mcp-server",
+    "claude",
+    "video-editing",
+    "cli"
+  ],
+  "homepage": "https://github.com/thoufeekx/umless#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thoufeekx/umless.git"
+  },
+  "bugs": "https://github.com/thoufeekx/umless/issues",
+  "license": "MIT",
+  "mcpName": "io.github.thoufeekx/umless",
+  "bin": {
+    "umless": "dist/umless.mjs"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev -p 3210",
     "build": "next build",
     "start": "next start -p 3210",
     "pipeline": "tsx scripts/run-pipeline.ts",
-    "test": "tsx --test lib/*.test.ts"
+    "build:cli": "tsup",
+    "prepack": "tsup",
+    "mcp": "tsx mcp/server.ts",
+    "test": "tsx --test lib/*.test.ts mcp/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "^15.5.4",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
     "@types/react": "^19.1.12",
+    "next": "^15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tsup": "^9.0.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
