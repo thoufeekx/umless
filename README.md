@@ -44,11 +44,11 @@ On these clips the transcriber returned very few "um" tokens, so the savings com
 ## How it works
 
 1. `ffmpeg` pulls the audio track.
-2. AssemblyAI Universal (through OpenRouter) transcribes it word by word with timings.
+2. ElevenLabs Scribe v2 (through OpenRouter) transcribes it word by word with timings. A second, cheap pass (Parakeet) finds the ums Scribe skipped, and each one is cut only where the audio shows a sound between two words.
 3. Rules mark fillers and repeats, and an LLM (`gpt-5-mini` by default) marks retakes and false starts.
 4. `ffmpeg` renders the kept segments into a new file.
 
-Change the models with `UMLESS_STT_MODEL` and `UMLESS_LLM_MODEL`. The pipeline is in [`lib/pipeline.ts`](lib/pipeline.ts) and the CLI in [`cli/umless.ts`](cli/umless.ts).
+Change the models with `UMLESS_STT_MODEL`, `UMLESS_FILLER_MODEL` (`off` disables the second pass) and `UMLESS_LLM_MODEL`. The pipeline is in [`lib/pipeline.ts`](lib/pipeline.ts) and the CLI in [`cli/umless.ts`](cli/umless.ts).
 
 To try it before using your own footage, run it on `testdata/demo_raw.mp4`, a 39 s take with 9 ums, 6 stutters and a retake.
 

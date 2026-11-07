@@ -4,6 +4,9 @@ All notable changes to Umless are listed here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Changed
+- Transcription now uses ElevenLabs Scribe v2 plus a Parakeet second pass for missed ums. On three real clips, filler recall went from 4% to 91% (96% precision). AssemblyAI had dropped 27 s of real speech on one clip, which the old pipeline then cut as dead air.
+
 Planned (see [issues](https://github.com/thoufeekx/umless/issues)):
 - `--json` output for scripts and agents (#1)
 - EDL / FCPXML export so cuts land in Premiere, Resolve and Final Cut (#2)
