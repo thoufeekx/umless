@@ -1,0 +1,29 @@
+# Changelog
+
+All notable changes to Umless are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+Planned (see [issues](https://github.com/thoufeekx/umless/issues)):
+- `--json` output for scripts and agents (#1)
+- EDL / FCPXML export so cuts land in Premiere, Resolve and Final Cut (#2)
+- `npx umless` with no clone needed (#3)
+- A clear error when `ffmpeg` is missing (#4)
+- `--padding <ms>` around cuts (#5) and a custom filler-word list (#6)
+
+## [0.1.0] - 2026-11-06
+
+First public release. MIT licensed.
+
+### Added
+- CLI: `npx tsx cli/umless.ts <video|audio>` writes `<name>.umless.mp4` (audio comes out as `.m4a`).
+- Cuts filler words (um, uh, er), stutters and repeated phrases, retakes and false starts (it keeps the last clean take), and dead air (long pauses shrink to 0.25 s).
+- Clean cuts: every boundary snaps to the quietest 10 ms nearby, with 15 ms fades.
+- `--score`: prints the Um Score (ums per minute, stutters and retakes, seconds of dead air) without rendering.
+- The terminal shows the transcript with every cut word struck through, plus the before/after length.
+- Bring your own OpenRouter key (about $0.02 for a 3-minute video). Needs Node 20+ and `ffmpeg`.
+
+Tested end to end: a 39.4 s talking-head clip came out at 17.5 s.
+
+[Unreleased]: https://github.com/thoufeekx/umless/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/thoufeekx/umless/releases/tag/v0.1.0
