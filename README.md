@@ -28,6 +28,19 @@ The terminal prints an Um Score (ums per minute, stutters and retakes, seconds o
 - **Dead air:** long pauses shrink to a natural 0.25 s.
 - **Clean cuts:** every boundary snaps to the quietest 10 ms nearby, with 15 ms fades, so you don't hear clicks.
 
+## On real footage
+
+<p align="center"><img src="docs/demo-real-footage.gif" alt="Unscripted NASA clip before and after Umless: a restart is cut and the line plays clean" width="640"></p>
+
+The 39 s test take above is scripted. Here are two unscripted clips from Wikimedia Commons, run through the same CLI with no hand edits:
+
+| Clip | Before | After | What it cut |
+|---|---|---|---|
+| NASA astronaut Greg Chamitoff, "The Smell of Space" (public domain) | 1:30 | 1:09 (−23%) | 1 restart, 1 false start, 1 repeat, 17.7 s of dead air |
+| Mick Harvey, interviewed by Andrew McMillen (CC BY 3.0) | 1:30 | 0:54 (−40%) | 2 restarts, 1 repeat, 32.2 s of dead air |
+
+On these clips the transcriber returned very few "um" tokens, so the savings come from restarts, repeats and pauses. Sources: [Chamitoff clip](https://commons.wikimedia.org/wiki/File:Ask_Astronaut_Greg_Chamitoff-_%27The_Smell_of_Space%27.webm) (NASA Johnson; no endorsement implied), [Harvey clip](https://commons.wikimedia.org/wiki/File:Mick_Harvey_(The_Bad_Seeds)_%27Talking_Smack_Honest_Conversations_About_Drugs%27.webm) (Andrew McMillen, CC BY 3.0, trimmed to 90 s and cut by Umless).
+
 ## How it works
 
 1. `ffmpeg` pulls the audio track.
