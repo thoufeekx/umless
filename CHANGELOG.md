@@ -4,9 +4,13 @@ All notable changes to Umless are listed here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+- `--edl`: writes `<name>.umless.edl` next to the render, an EDL (CMX 3600) for Premiere, Resolve, Avid with one event per kept segment, source timecodes from the original file and back-to-back record timecodes from 01:00:00:00. Frame rate comes from `ffprobe` (30 fps fallback); 29.97 and 23.976 are written as non-drop-frame. FCPXML is still planned (#2).
+- `npm test` runs the unit tests (`node:test` via `tsx`).
+
 Planned (see [issues](https://github.com/thoufeekx/umless/issues)):
 - `--json` output for scripts and agents (#1)
-- EDL / FCPXML export so cuts land in Premiere, Resolve and Final Cut (#2)
+- FCPXML export for Final Cut Pro
 - `npx umless` with no clone needed (#3)
 - A clear error when `ffmpeg` is missing (#4)
 - `--padding <ms>` around cuts (#5) and a custom filler-word list (#6)
