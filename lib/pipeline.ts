@@ -53,13 +53,18 @@ export async function extractAudio(input: string, outWav: string) {
 // Every AI call goes through one OpenRouter key.
 const OR = "https://openrouter.ai/api/v1";
 const orHeaders = () => ({ Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "X-Title": "Umless" });
-// AssemblyAI keeps every "um" and its word timings land within ~40 ms of ElevenLabs Scribe. ~$0.30/hour of audio.
-const STT_MODEL = process.env.UMLESS_STT_MODEL || "assemblyai/universal-3-6-pro";
+// ElevenLabs Scribe v2 is the main transcript: full coverage with word timings (~$0.22/hour of audio).
+// AssemblyAI dropped a 27 s stretch of speech on one eval clip and returned almost no "um"s on real footage.
+const STT_MODEL = process.env.UMLESS_STT_MODEL || "elevenlabs/scribe-v2";
+// Second, cheap pass used only to find fillers the main transcript skipped (~$0.06/hour). Its word timings are
+// too loose to cut on, so each filler it hears is placed on the voiced audio inside a gap of the main transcript.
+// Set UMLESS_FILLER_MODEL=off to disable.
+const FILLER_MODEL = process.env.UMLESS_FILLER_MODEL ?? "nvidia/parakeet-tdt-0.6b-v3";
 const LLM_MODEL = process.env.UMLESS_LLM_MODEL || "openai/gpt-5-mini";
 
-export async function transcribe(wav: string): Promise<Word[]> {
+async function sttWords(wav: string, model: string): Promise<Word[]> {
   const form = new FormData();
-  form.append("model", STT_MODEL);
+  form.append("model", model);
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
   form.append("file", new Blob([new Uint8Array(await fs.readFile(wav))], { type: "audio/wav" }), path.basename(wav));
@@ -67,8 +72,108 @@ export async function transcribe(wav: string): Promise<Word[]> {
   if (!res.ok) throw new Error(`transcription failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
   return ((j.words || []) as { word: string; start: number; end: number }[])
-    .filter((w) => w.word?.trim())
+    .filter((w) => /[\p{L}\p{N}]/u.test(w.word || "")) // drop bare punctuation tokens like "..."
     .map(({ word, start, end }) => ({ text: word.trim(), start, end }));
+}
+
+export async function transcribe(wav: string): Promise<Word[]> {
+  const useHints = FILLER_MODEL && FILLER_MODEL !== "off";
+  const [words, hints] = await Promise.all([
+    sttWords(wav, STT_MODEL),
+    useHints ? sttWords(wav, FILLER_MODEL).catch(() => [] as Word[]) : Promise.resolve([] as Word[]),
+  ]);
+  if (!hints.some((w) => isFiller(w.text))) return words;
+  return addMissedFillers(words, hints, frameRms(await readPcm(wav)));
+}
+
+export const isFiller = (t: string) => FILLERS.has(norm(t));
+
+const FRAME = 0.01; // seconds per RMS frame
+const HINT_MIN_GAP = 0.25; // fillers squeezed into shorter gaps were mostly mis-timed real words in the eval
+const HINT_SLACK = 0.15; // how far a hint's own timing may be off
+const HINT_MIN_RUN = 0.08;
+
+// Adds fillers that `hints` (a second transcript) heard but `words` skipped. Each one is only added where the main
+// transcript has a silent-looking gap and the audio in that gap is actually loud, and it takes the timing of that
+// loud run, never of the hint. So a hint can never cause a real word to be cut.
+export function addMissedFillers(words: Word[], hints: Word[], rms: number[]): Word[] {
+  if (!rms.length) return words;
+  const sorted = [...rms].sort((a, b) => a - b);
+  const pct = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] + 1e-3;
+  const floor = pct(0.1);
+  const thr = floor * Math.sqrt(pct(0.7) / floor); // halfway (in dB) between room tone and typical speech
+  const content = words.filter((w) => !isFiller(w.text)).sort((a, b) => a.start - b.start);
+  const known = words.filter((w) => isFiller(w.text)).map((w) => (w.start + w.end) / 2);
+  const gaps: [number, number][] = [];
+  let prev = 0;
+  for (const w of content) {
+    if (w.start > prev) gaps.push([prev, w.start]);
+    prev = Math.max(prev, w.end);
+  }
+  gaps.push([prev, rms.length * FRAME]);
+
+  const added: Word[] = [];
+  for (const h of hints) {
+    if (!isFiller(h.text)) continue;
+    const mid = (h.start + h.end) / 2;
+    if (known.some((k) => Math.abs(k - mid) < 0.4)) continue;
+    const lo = h.start - HINT_SLACK;
+    const hi = h.end + HINT_SLACK;
+    let best: { d: number; s: number; e: number } | null = null;
+    for (const [a, b] of gaps) {
+      if (b < lo || a > hi || b - a < HINT_MIN_GAP) continue;
+      for (const [s, e] of loudRuns(rms, thr, a + 0.02, b - 0.02)) {
+        if (e - s < HINT_MIN_RUN || s >= hi || e <= lo) continue;
+        const d = Math.abs((s + e) / 2 - mid);
+        if (!best || d < best.d) best = { d, s, e };
+      }
+    }
+    if (!best) continue;
+    added.push({ text: norm(h.text), start: best.s, end: best.e });
+    known.push((best.s + best.e) / 2);
+  }
+  return [...words, ...added].sort((a, b) => a.start - b.start);
+}
+
+// Runs of frames above `thr` between times a and b, bridging dips of up to 30 ms.
+function loudRuns(rms: number[], thr: number, a: number, b: number): [number, number][] {
+  const i0 = Math.max(0, Math.round(a / FRAME));
+  const i1 = Math.min(rms.length, Math.round(b / FRAME));
+  const runs: [number, number][] = [];
+  let i = i0;
+  while (i < i1) {
+    if (rms[i] <= thr) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < i1 && (rms[j] > thr || rms.slice(j + 1, Math.min(i1, j + 4)).some((x) => x > thr))) j++;
+    runs.push([i * FRAME, j * FRAME]);
+    i = j;
+  }
+  return runs;
+}
+
+export async function readPcm(input: string): Promise<Int16Array> {
+  const pcm = await new Promise<Buffer>((resolve, reject) => {
+    const p = spawn("ffmpeg", ["-loglevel", "error", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", "-"]);
+    const chunks: Buffer[] = [];
+    p.stdout.on("data", (d) => chunks.push(d));
+    p.on("close", (code) => (code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error("ffmpeg audio read failed"))));
+  });
+  return new Int16Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.length / 2));
+}
+
+// RMS level of each 10 ms frame of 16 kHz mono audio.
+export function frameRms(samples: Int16Array): number[] {
+  const frame = 160;
+  const rms: number[] = [];
+  for (let i = 0; i + frame <= samples.length; i += frame) {
+    let s = 0;
+    for (let j = i; j < i + frame; j++) s += samples[j] * samples[j];
+    rms.push(Math.sqrt(s / frame));
+  }
+  return rms;
 }
 
 async function chatJSON(system: string, user: string) {
@@ -192,20 +297,7 @@ export function keepSegments(a: Analysis): Segment[] {
 // Word timings can be off by ~50 ms, which leaves the tail of a cut "uh" behind. Move every cut
 // boundary to the quietest 10 ms within ±70 ms of where the transcript put it.
 export async function snapToSilence(input: string, segs: Segment[]): Promise<Segment[]> {
-  const pcm = await new Promise<Buffer>((resolve, reject) => {
-    const p = spawn("ffmpeg", ["-loglevel", "error", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", "-"]);
-    const chunks: Buffer[] = [];
-    p.stdout.on("data", (d) => chunks.push(d));
-    p.on("close", (code) => (code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error("ffmpeg audio read failed"))));
-  });
-  const samples = new Int16Array(pcm.buffer, pcm.byteOffset, Math.floor(pcm.length / 2));
-  const frame = 160; // 10 ms
-  const rms: number[] = [];
-  for (let i = 0; i + frame <= samples.length; i += frame) {
-    let s = 0;
-    for (let j = i; j < i + frame; j++) s += samples[j] * samples[j];
-    rms.push(Math.sqrt(s / frame));
-  }
+  const rms = frameRms(await readPcm(input));
   const quietest = (t: number) => {
     const c = Math.round(t * 100);
     let best = c;
@@ -270,7 +362,7 @@ export function sentences(a: Analysis): Sentence[] {
   const out: Sentence[] = [];
   let buf: Word[] = [];
   a.words.forEach((w, i) => {
-    if (a.cutIdx[i]) return;
+    if (a.cutIdx[i] || /^\[.*\]$/.test(w.text)) return; // skip cut words and audio-event tags like [laughs]
     buf.push(w);
     if (/[.!?]$/.test(w.text) || buf.length >= 30) {
       out.push({ start: buf[0].start, end: buf[buf.length - 1].end, original: buf.map((x) => x.text).join(" "), polished: "" });

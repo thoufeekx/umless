@@ -21,7 +21,7 @@ Needs `ffmpeg` on the PATH and `AudioBet/.env` with `OPENROUTER_API_KEY` (all AI
 
 ## Engine (`lib/pipeline.ts`), all through OpenRouter
 
-1. AssemblyAI Universal-3.6 Pro transcribes word by word (keeps every "um"; Whisper, Deepgram and Grok drop them).
+1. ElevenLabs Scribe v2 transcribes word by word. In parallel, Parakeet TDT 0.6b v3 (a second, cheap pass) lists the ums Scribe skipped; each one is cut only where Scribe has a gap and the audio in that gap is loud, using that audio's own timing (`addMissedFillers`). On the 3-clip eval (PR "Catch the ums"), filler recall went from 4% (AssemblyAI) to 91%, at 96% precision. Turn the second pass off with `UMLESS_FILLER_MODEL=off`.
 2. Rules mark fillers and repeated phrases; gpt-5-mini marks retakes and false starts.
 3. ffmpeg cuts the kept segments, each boundary snapped to the quietest 10 ms nearby, with 15 ms fades; long pauses shrink to 0.25 s.
 4. Studio Sound: local ffmpeg denoise + compression + loudness normalisation (free).
