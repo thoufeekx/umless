@@ -41,7 +41,7 @@
     "start": "next start -p 3210",
     "pipeline": "tsx scripts/run-pipeline.ts",
     "build:cli": "tsup",
-    "prepack": "tsup",
+    "prepare": "node -e \"require('fs').existsSync('tsup.config.ts') && require('child_process').execSync('tsup', { stdio: 'inherit' })\"",
     "mcp": "tsx mcp/server.ts",
     "test": "tsx --test lib/*.test.ts mcp/*.test.ts",
     "typecheck": "tsc --noEmit"
