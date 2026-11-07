@@ -12,7 +12,7 @@ async function main() {
     console.log("usage: OPENROUTER_API_KEY=... umless <video|audio> [--score] [--edl]\n  --edl  also write <name>.umless.edl (CMX 3600) for Premiere, Resolve, Avid\n  Get a key at https://openrouter.ai/keys");
     process.exit(1);
   }
-  const { duration, hasVideo, frameRate } = await probe(input);
+  const { duration, hasVideo, frameRate, timecode } = await probe(input);
   const base = input.replace(/\.[^.]+$/, "");
   const wav = `${base}.umless.wav`;
   await extractAudio(input, wav);
@@ -27,9 +27,11 @@ async function main() {
     console.log(`\n✓ ${path.basename(out)}  ${duration.toFixed(1)}s → ${d.toFixed(1)}s`);
     if (flags.includes("--edl")) {
       const edl = `${base}.umless.edl`;
-      const opts = { title: path.basename(base) + ".umless", sourceName: path.basename(input), fps: parseFps(frameRate), hasVideo };
-      await fs.writeFile(edl, buildEdl(segs, opts));
-      console.log(`✓ ${path.basename(edl)}  ${segs.length} events at ${Number(opts.fps.toFixed(3))} fps`);
+      const opts = { title: path.basename(base) + ".umless", sourceName: path.basename(input), fps: parseFps(frameRate), hasVideo, sourceTimecode: timecode };
+      const text = buildEdl(segs, opts);
+      await fs.writeFile(edl, text);
+      const events = text.split("\n").filter((l) => /^\d{3} /.test(l)).length;
+      console.log(`✓ ${path.basename(edl)}  ${events} events at ${Number(opts.fps.toFixed(3))} fps${/^FCM: DROP/m.test(text) ? " drop-frame" : ""}`);
     }
     console.log("Want it re-recorded in your own voice, no stumbles? → https://umless.app");
   }

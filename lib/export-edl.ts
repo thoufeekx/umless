@@ -1,30 +1,72 @@
 // CMX 3600 EDL export: one event per kept segment, so the cut can be finished in Premiere, Resolve or Avid.
 // Pure: no I/O. The CLI writes the returned string next to the rendered file.
-import type { Segment } from "./pipeline";
+import { parseRate, type Segment } from "./pipeline";
 
 export const DEFAULT_FPS = 30;
 
 // Parses an ffprobe rate like "30000/1001" or "25". Falls back to 30 fps for missing, zero or absurd values.
 export function parseFps(rate: string | undefined): number {
-  if (!rate) return DEFAULT_FPS;
-  const [n, d = "1"] = rate.split("/");
-  const fps = Number(n) / Number(d);
-  return Number.isFinite(fps) && fps >= 1 && fps <= 120 ? fps : DEFAULT_FPS;
+  const r = parseRate(rate);
+  return r.num / r.den;
 }
 
-// Timecode base: 29.97 counts as 30, 23.976 as 24, 59.94 as 60 (non-drop-frame).
+// Timecode base: 29.97 counts as 30, 23.976 as 24, 59.94 as 60.
 export const tcBase = (fps: number) => Math.round(fps);
+
+// Drop-frame timecode only exists for 29.97 and 59.94.
+export const canDropFrame = (fps: number) => Math.abs(fps - 30000 / 1001) < 0.01 || Math.abs(fps - 60000 / 1001) < 0.01;
 
 // Seconds on the media's real clock to a frame index.
 export const secondsToFrames = (sec: number, fps: number) => Math.round(sec * fps);
 
-// Frame index to non-drop-frame HH:MM:SS:FF.
-export function framesToTimecode(frames: number, fps: number): string {
+const dropPerMinute = (fps: number) => (tcBase(fps) === 60 ? 4 : 2);
+
+// Frame count to HH:MM:SS:FF (non-drop-frame) or HH:MM:SS;FF (drop-frame: skips frame labels :00 and :01
+// (:00-:03 at 59.94) at the start of every minute except minutes divisible by 10, so it tracks wall-clock time).
+export function framesToTimecode(frames: number, fps: number, dropFrame = false): string {
   const base = tcBase(fps);
-  const f = frames % base;
-  const totalSec = Math.floor(frames / base);
+  const df = dropFrame && canDropFrame(fps);
+  let n = frames;
+  if (df) {
+    const d = dropPerMinute(fps);
+    const per10 = base * 600 - d * 9; // real frames in 10 minutes
+    const perMin = base * 60 - d; // real frames in a dropped minute
+    const tens = Math.floor(n / per10);
+    const rem = n % per10;
+    n += d * 9 * tens + (rem > d ? d * Math.floor((rem - d) / perMin) : 0);
+  }
+  const f = n % base;
+  const totalSec = Math.floor(n / base);
   const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(Math.floor(totalSec / 3600))}:${p(Math.floor(totalSec / 60) % 60)}:${p(totalSec % 60)}:${p(f)}`;
+  return `${p(Math.floor(totalSec / 3600) % 24)}:${p(Math.floor(totalSec / 60) % 60)}:${p(totalSec % 60)}${df ? ";" : ":"}${p(f)}`;
+}
+
+// HH:MM:SS:FF / HH:MM:SS;FF (also "." or "," before frames) to a frame count. ";" "." "," mean drop-frame.
+export function timecodeToFrames(tc: string, fps: number): { frames: number; dropFrame: boolean } {
+  const m = /^(\d{1,2}):(\d{2}):(\d{2})([:;.,])(\d{2,3})$/.exec(tc.trim());
+  if (!m) throw new Error(`bad timecode: ${tc}`);
+  const [h, mi, s, f] = [m[1], m[2], m[3], m[5]].map(Number);
+  const dropFrame = m[4] !== ":" && canDropFrame(fps);
+  let frames = (h * 3600 + mi * 60 + s) * tcBase(fps) + f;
+  if (dropFrame) {
+    const mins = h * 60 + mi;
+    frames -= dropPerMinute(fps) * (mins - Math.floor(mins / 10));
+  }
+  return { frames, dropFrame };
+}
+
+// Where the source clip's own timecode starts, and whether the whole EDL should be drop-frame.
+// Tagged media: follow its tag. Untagged 29.97 / 59.94: drop-frame, the broadcast and NLE default.
+export function sourceTiming(fps: number, sourceTimecode?: string): { startFrames: number; dropFrame: boolean } {
+  if (sourceTimecode) {
+    try {
+      const t = timecodeToFrames(sourceTimecode, fps);
+      return { startFrames: t.frames, dropFrame: t.dropFrame };
+    } catch {
+      // unreadable tag: fall through to the untagged default
+    }
+  }
+  return { startFrames: 0, dropFrame: canDropFrame(fps) };
 }
 
 export type EdlOptions = {
@@ -32,23 +74,24 @@ export type EdlOptions = {
   sourceName: string; // file name of the original media, used by NLEs to relink
   fps: number;
   hasVideo?: boolean; // false -> audio-only events
+  sourceTimecode?: string; // ffprobe timecode tag of the original, e.g. "01:00:00;00"
   recordStartFrames?: number; // default 01:00:00:00, the usual timeline start
 };
 
 export function buildEdl(segs: Segment[], o: EdlOptions): string {
   const fps = o.fps > 0 ? o.fps : DEFAULT_FPS;
-  const base = tcBase(fps);
-  const fractional = Math.abs(fps - base) > 0.001;
+  const { startFrames, dropFrame } = sourceTiming(fps, o.sourceTimecode);
+  const tc = (f: number) => framesToTimecode(f, fps, dropFrame);
   const track = o.hasVideo === false ? "AA" : "AA/V";
-  let rec = o.recordStartFrames ?? 3600 * base;
+  // 01:00:00:00 as a label; in drop-frame that is 107892 frames at 29.97.
+  let rec = o.recordStartFrames ?? timecodeToFrames(dropFrame ? "01:00:00;00" : "01:00:00:00", fps).frames;
+  const mode = dropFrame ? "DROP FRAME" : "NON-DROP FRAME";
   const lines = [
     `TITLE: ${o.title}`,
-    "FCM: NON-DROP FRAME",
+    `FCM: ${mode}`,
     `* Generated by Umless (https://github.com/thoufeekx/umless) at ${Number(fps.toFixed(3))} fps.`,
-    fractional
-      ? `* ${Number(fps.toFixed(3))} fps written as ${base} fps NON-DROP FRAME timecode; it drifts from wall-clock time but every frame is exact.`
-      : `* Timecode is NON-DROP FRAME.`,
-    "* Source timecode assumes the media starts at 00:00:00:00.",
+    `* Timecode is ${mode}${!dropFrame && tcBase(fps) !== fps ? `, counted on a ${tcBase(fps)} fps base` : ""}.`,
+    `* Source timecode starts at ${tc(startFrames)}${o.sourceTimecode ? " (from the file)" : " (file has no timecode track)"}.`,
     "",
   ];
   let n = 0;
@@ -59,7 +102,7 @@ export function buildEdl(segs: Segment[], o: EdlOptions): string {
     n++;
     const recOut = rec + (srcOut - srcIn);
     lines.push(
-      `${String(n).padStart(3, "0")}  AX       ${track.padEnd(5)} C        ${framesToTimecode(srcIn, fps)} ${framesToTimecode(srcOut, fps)} ${framesToTimecode(rec, fps)} ${framesToTimecode(recOut, fps)}`,
+      `${String(n).padStart(3, "0")}  AX       ${track.padEnd(5)} C        ${tc(startFrames + srcIn)} ${tc(startFrames + srcOut)} ${tc(rec)} ${tc(recOut)}`,
       `* FROM CLIP NAME: ${o.sourceName}`,
       "",
     );

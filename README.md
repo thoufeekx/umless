@@ -31,7 +31,7 @@ The terminal prints an Um Score (ums per minute, stutters and retakes, seconds o
 
 ## Finish in your editor
 
-Add `--edl` to also write `my-video.umless.edl` next to the render: an EDL (CMX 3600) for Premiere, Resolve, Avid, with one event per kept segment pointing at your original file, so you can keep editing instead of taking our render. Frame rate comes from the source (30 fps if it can't be read); 29.97 and 23.976 are written as non-drop-frame timecode. FCPXML is still planned.
+Add `--edl` to also write `my-video.umless.edl` next to the render: an EDL (CMX 3600) for Premiere, Resolve, Avid, with one event per kept segment pointing at your original file, so you can keep editing instead of taking our render. Frame rate and start timecode come from the source (30 fps and 00:00:00:00 if they can't be read); 29.97 and 59.94 use drop-frame timecode unless the file's own timecode is non-drop, 23.976 is non-drop. Cut points are snapped to whole frames, so the EDL and the render contain exactly the same frames. FCPXML is still planned.
 
 ## How it works
 

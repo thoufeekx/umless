@@ -38,16 +38,44 @@ export function run(cmd: string, args: string[]): Promise<string> {
 }
 
 export async function probe(file: string) {
-  const out = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type,avg_frame_rate,r_frame_rate", "-of", "json", file]);
+  const out = await run("ffprobe", [
+    "-v", "error",
+    "-show_entries", "format=duration:format_tags=timecode:stream=codec_type,avg_frame_rate,r_frame_rate:stream_tags=timecode",
+    "-of", "json", file,
+  ]);
   const j = JSON.parse(out);
-  type S = { codec_type: string; avg_frame_rate?: string; r_frame_rate?: string };
-  const video = ((j.streams || []) as S[]).find((s) => s.codec_type === "video");
+  type S = { codec_type: string; avg_frame_rate?: string; r_frame_rate?: string; tags?: { timecode?: string } };
+  const streams = (j.streams || []) as S[];
+  const video = streams.find((s) => s.codec_type === "video");
   const rate = video && video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video?.r_frame_rate;
+  // Camera / NLE start timecode: on the video stream, a QuickTime tmcd data stream, or the container.
+  const timecode = video?.tags?.timecode || streams.find((s) => s.tags?.timecode)?.tags?.timecode || j.format.tags?.timecode;
   return {
     duration: Number(j.format.duration),
     hasVideo: !!video,
     frameRate: rate, // ffprobe string like "30000/1001"; undefined for audio
+    timecode: timecode as string | undefined, // e.g. "01:00:00;00" (";" = drop-frame); undefined if untagged
   };
+}
+
+export type Rate = { num: number; den: number };
+
+// Parses an ffprobe rate like "30000/1001" or "25" exactly. Falls back to 30/1 for missing, zero or absurd values.
+export function parseRate(rate: string | undefined): Rate {
+  const [n, d = "1"] = (rate || "").split("/");
+  const num = Number(n);
+  const den = Number(d);
+  const fps = num / den;
+  return Number.isInteger(num) && Number.isInteger(den) && fps >= 1 && fps <= 120 ? { num, den } : { num: 30, den: 1 };
+}
+
+// Moves every boundary onto the source frame grid, so the render, the EDL and the XML exports contain exactly
+// the same frames (an NLE can only cut on frames). Drops segments that round to nothing.
+export function snapToFrames(segs: Segment[], r: Rate): Segment[] {
+  const f = (t: number) => Math.round((t * r.num) / r.den);
+  return segs
+    .map((s) => ({ start: (f(s.start) * r.den) / r.num, end: (f(s.end) * r.den) / r.num }))
+    .filter((s) => s.end > s.start);
 }
 
 export async function extractAudio(input: string, outWav: string) {
@@ -223,16 +251,21 @@ export async function snapToSilence(input: string, segs: Segment[]): Promise<Seg
 }
 
 // Cuts video+audio (or audio only) down to the kept segments with tiny fades to avoid clicks.
-// Returns the segments actually rendered (after snapping), so exports match the file.
+// Boundaries are snapped to the source frame grid. Returns the segments actually rendered, so exports match the file.
 export async function renderCut(input: string, rawSegs: Segment[], out: string, hasVideo: boolean): Promise<Segment[]> {
-  const segs = await snapToSilence(input, rawSegs);
+  const rate = parseRate((await probe(input)).frameRate);
+  const segs = snapToFrames(await snapToSilence(input, rawSegs), rate);
+  const half = rate.den / rate.num / 2;
   const parts: string[] = [];
   const labels: string[] = [];
   segs.forEach((s, i) => {
     const d = (s.end - s.start).toFixed(3);
-    const st = s.start.toFixed(3);
-    const en = s.end.toFixed(3);
-    if (hasVideo) parts.push(`[0:v]trim=start=${st}:end=${en},setpts=PTS-STARTPTS[v${i}]`);
+    const st = s.start.toFixed(6);
+    const en = s.end.toFixed(6);
+    // Trim half a frame early on both ends: keeps frame start..end-1 even when timestamps jitter by a tick.
+    const vs = Math.max(0, s.start - half).toFixed(6);
+    const ve = (s.end - half).toFixed(6);
+    if (hasVideo) parts.push(`[0:v]trim=start=${vs}:end=${ve},setpts=PTS-STARTPTS[v${i}]`);
     parts.push(
       `[0:a]atrim=start=${st}:end=${en},asetpts=PTS-STARTPTS,afade=t=in:d=0.015,afade=t=out:st=${Math.max(0, Number(d) - 0.015).toFixed(3)}:d=0.015[a${i}]`,
     );
@@ -242,7 +275,7 @@ export async function renderCut(input: string, rawSegs: Segment[], out: string, 
   const graphFile = out + ".filter.txt";
   await fs.writeFile(graphFile, parts.join(";\n"));
   const args = ["-y", "-loglevel", "error", "-i", input, "-/filter_complex", graphFile];
-  if (hasVideo) args.push("-map", "[v]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p");
+  if (hasVideo) args.push("-map", "[v]", "-r", `${rate.num}/${rate.den}`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p");
   args.push("-map", "[a]", "-c:a", "aac", "-b:a", "192k", out);
   await run("ffmpeg", args);
   await fs.rm(graphFile, { force: true });
