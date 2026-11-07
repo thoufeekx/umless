@@ -16,6 +16,7 @@ You need Node 20+, `ffmpeg` on your PATH and an [OpenRouter key](https://openrou
 git clone https://github.com/thoufeekx/umless && cd umless && npm install
 OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4          # writes my-video.umless.mp4
 OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4 --score  # Um Score only, no render
+OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4 --edl    # also writes my-video.umless.edl
 ```
 
 The terminal prints an Um Score (ums per minute, stutters and retakes, seconds of dead air), your transcript with every cut word struck through, and the before/after length. Audio files work too and come out as `.m4a`.
@@ -27,6 +28,10 @@ The terminal prints an Um Score (ums per minute, stutters and retakes, seconds o
 - **Retakes and false starts:** say a sentence twice and it keeps the last clean one.
 - **Dead air:** long pauses shrink to a natural 0.25 s.
 - **Clean cuts:** every boundary snaps to the quietest 10 ms nearby, with 15 ms fades, so you don't hear clicks.
+
+## Finish in your editor
+
+Add `--edl` to also write `my-video.umless.edl` next to the render: an EDL (CMX 3600) for Premiere, Resolve, Avid, with one event per kept segment pointing at your original file, so you can keep editing instead of taking our render. Frame rate comes from the source (30 fps if it can't be read); 29.97 and 23.976 are written as non-drop-frame timecode. FCPXML is still planned.
 
 ## How it works
 
@@ -51,7 +56,7 @@ Most filler-word removers are closed. You can't see why a word was cut, and you 
 ## Roadmap
 
 - `npx umless`, with no clone needed
-- Timeline export (FCPXML / EDL) so you can finish in Premiere, Resolve, Final Cut or Kdenlive
+- FCPXML timeline export for Final Cut Pro and Kdenlive (EDL is already in, see `--edl`)
 - A `--json` cut list and an MCP server for agents and automation pipelines
 - A local transcription option (whisper.cpp)
 

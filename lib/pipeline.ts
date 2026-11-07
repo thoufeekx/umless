@@ -38,11 +38,15 @@ export function run(cmd: string, args: string[]): Promise<string> {
 }
 
 export async function probe(file: string) {
-  const out = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "json", file]);
+  const out = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type,avg_frame_rate,r_frame_rate", "-of", "json", file]);
   const j = JSON.parse(out);
+  type S = { codec_type: string; avg_frame_rate?: string; r_frame_rate?: string };
+  const video = ((j.streams || []) as S[]).find((s) => s.codec_type === "video");
+  const rate = video && video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video?.r_frame_rate;
   return {
     duration: Number(j.format.duration),
-    hasVideo: (j.streams || []).some((s: { codec_type: string }) => s.codec_type === "video"),
+    hasVideo: !!video,
+    frameRate: rate, // ffprobe string like "30000/1001"; undefined for audio
   };
 }
 
@@ -219,7 +223,8 @@ export async function snapToSilence(input: string, segs: Segment[]): Promise<Seg
 }
 
 // Cuts video+audio (or audio only) down to the kept segments with tiny fades to avoid clicks.
-export async function renderCut(input: string, rawSegs: Segment[], out: string, hasVideo: boolean) {
+// Returns the segments actually rendered (after snapping), so exports match the file.
+export async function renderCut(input: string, rawSegs: Segment[], out: string, hasVideo: boolean): Promise<Segment[]> {
   const segs = await snapToSilence(input, rawSegs);
   const parts: string[] = [];
   const labels: string[] = [];
@@ -241,6 +246,7 @@ export async function renderCut(input: string, rawSegs: Segment[], out: string, 
   args.push("-map", "[a]", "-c:a", "aac", "-b:a", "192k", out);
   await run("ffmpeg", args);
   await fs.rm(graphFile, { force: true });
+  return segs;
 }
 
 // Studio Sound, done locally with ffmpeg (free): rumble cut, broadband denoise, gentle compression.
