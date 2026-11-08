@@ -7,7 +7,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 ARG NEXT_PUBLIC_SITE_URL
-ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL NEXT_TELEMETRY_DISABLED=1
+# Hosted free try only: NEXT_PUBLIC_TRY=1 shows the email box; NEXT_PUBLIC_UPLOAD_ORIGIN sends uploads straight to the tunnel.
+ARG NEXT_PUBLIC_TRY=""
+ARG NEXT_PUBLIC_UPLOAD_ORIGIN=""
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL NEXT_PUBLIC_TRY=$NEXT_PUBLIC_TRY NEXT_PUBLIC_UPLOAD_ORIGIN=$NEXT_PUBLIC_UPLOAD_ORIGIN NEXT_TELEMETRY_DISABLED=1
 # next/react are devDependencies (so `npx umless` does not install them), so the image keeps dev deps.
 RUN npm run build
 ENV NODE_ENV=production

@@ -1,4 +1,5 @@
-import { promises as fs } from "node:fs";
+import { createReadStream, promises as fs } from "node:fs";
+import { Readable } from "node:stream";
 import path from "node:path";
 import { getJob, jobDir } from "@/lib/jobs";
 
@@ -19,11 +20,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get("range") || "");
   const start = m && m[1] ? Number(m[1]) : 0;
   const end = m && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
-  const fh = await fs.open(file, "r");
-  const buf = new Uint8Array(end - start + 1);
-  await fh.read(buf, 0, buf.length, start);
-  await fh.close();
-  headers["Content-Length"] = String(buf.length);
+  // Streamed, so a 200 MB download doesn't sit in memory.
+  const body = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream;
+  headers["Content-Length"] = String(end - start + 1);
   if (m) headers["Content-Range"] = `bytes ${start}-${end}/${size}`;
-  return new Response(buf, { status: m ? 206 : 200, headers });
+  return new Response(body, { status: m ? 206 : 200, headers });
 }

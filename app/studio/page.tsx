@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { Transcript } from "@/components/Transcript";
-import { useJob } from "@/components/useJob";
+import { EMAIL_OK, TryEmail } from "@/components/TryEmail";
+import { TRY, useJob } from "@/components/useJob";
 
 const MODES = [
   { id: "cut", name: "Clean Cut", desc: "Removes ums, stutters, retakes and dead air. Your real voice." },
@@ -22,6 +23,9 @@ export default function Studio() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState("cut");
   const [voice, setVoice] = useState("me");
+  const [email, setEmail] = useState("");
+  const modes = TRY ? MODES.filter((m) => m.id !== "revoice") : MODES;
+  const ready = !!file && !busy && (!TRY || EMAIL_OK(email));
   const s = job?.stats;
 
   return (
@@ -30,7 +34,7 @@ export default function Studio() {
       <p className="lead">Upload a demo, a talking-head video or a voice note. Get it back sounding like you nailed it in one take.</p>
 
       <div className="grid" style={{ marginTop: 24 }}>
-        {MODES.map((m) => (
+        {modes.map((m) => (
           <label key={m.id} className={`card ${mode === m.id ? "pop" : ""}`} style={{ cursor: "pointer" }}>
             <input type="radio" name="mode" checked={mode === m.id} onChange={() => setMode(m.id)} /> <strong>{m.name}</strong>
             <p className="small muted" style={{ margin: "6px 0 0" }}>{m.desc}</p>
@@ -49,9 +53,10 @@ export default function Studio() {
 
       <div className="drop" style={{ marginTop: 20 }}>
         <input type="file" accept="video/*,audio/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <TryEmail email={email} setEmail={setEmail} />
         <div style={{ marginTop: 16 }}>
-          <button className="btn" disabled={!file || busy} onClick={() => file && start(file, mode, voice)}>
-            {busy ? job?.step || "Uploading…" : "Fix my video"}
+          <button className="btn" disabled={!ready} onClick={() => file && start(file, mode, voice, email)}>
+            {busy ? job?.step || "Uploading…" : TRY ? "Clean my clip free" : "Fix my video"}
           </button>
         </div>
       </div>

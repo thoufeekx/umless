@@ -3,6 +3,10 @@ import { useEffect, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import { track } from "@/components/Track";
 
+// Hosted free try (NEXT_PUBLIC_TRY=1): an email is required and big uploads go straight to the tunnel origin.
+export const TRY = process.env.NEXT_PUBLIC_TRY === "1";
+const UPLOAD_ORIGIN = process.env.NEXT_PUBLIC_UPLOAD_ORIGIN || "";
+
 export function useJob() {
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
@@ -14,7 +18,7 @@ export function useJob() {
     if (id && /^[a-f0-9-]{36}$/.test(id)) setJob({ id, status: "queued", step: "Loading" } as Job);
   }, []);
 
-  async function start(file: File, mode: string, voice = "me") {
+  async function start(file: File, mode: string, voice = "me", email = "") {
     setError("");
     setJob(null);
     setBusy(true);
@@ -23,10 +27,18 @@ export function useJob() {
     body.append("file", file);
     body.append("mode", mode);
     body.append("voice", voice);
-    const res = await fetch("/api/jobs", { method: "POST", body });
-    const j = await res.json();
+    const headers: Record<string, string> = TRY ? { "x-umless-email": email, "x-umless-mode": mode } : {};
+    const post = (origin: string) => fetch(origin + "/api/jobs", { method: "POST", body, headers });
+    let res: Response;
+    try {
+      res = await post(UPLOAD_ORIGIN);
+    } catch {
+      // Direct upload blocked (network, extension)? Small files still fit through the main origin.
+      res = UPLOAD_ORIGIN && file.size < 95 * 1024 * 1024 ? await post("").catch(() => new Response("{}", { status: 502 })) : new Response("{}", { status: 502 });
+    }
+    const j = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(j.error || "Upload failed");
+      setError(j.error || "Upload failed. Check your connection and try again.");
       setBusy(false);
       return;
     }

@@ -2,23 +2,26 @@
 import { useState } from "react";
 import { ScoreCard } from "@/components/ScoreCard";
 import { Transcript } from "@/components/Transcript";
-import { useJob } from "@/components/useJob";
+import { EMAIL_OK, TryEmail } from "@/components/TryEmail";
+import { TRY, useJob } from "@/components/useJob";
 import { Waitlist } from "@/components/Waitlist";
 
 export default function UmScore() {
   const { job, error, busy, start } = useJob();
   const [file, setFile] = useState<File | null>(null);
+  const [email, setEmail] = useState("");
   const s = job?.stats;
 
   return (
     <>
       <h1>How many times do you say &ldquo;um&rdquo;?</h1>
-      <p className="lead">Drop any video or voice note. In about 30 seconds you get your Um Score: ums per minute, stutters, retakes and dead air. Free, no signup.</p>
+      <p className="lead">Drop any video or voice note. In about 30 seconds you get your Um Score: ums per minute, stutters, retakes and dead air. Free{TRY ? " (just your email)" : ", no signup"}.</p>
 
       <div className="drop" style={{ marginTop: 28 }}>
         <input type="file" accept="video/*,audio/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <TryEmail email={email} setEmail={setEmail} />
         <div style={{ marginTop: 16 }}>
-          <button className="btn" disabled={!file || busy} onClick={() => file && start(file, "score")}>
+          <button className="btn" disabled={!file || busy || (TRY && !EMAIL_OK(email))} onClick={() => file && start(file, "score", "me", email)}>
             {busy ? job?.step || "Uploading…" : "Get my Um Score"}
           </button>
         </div>
