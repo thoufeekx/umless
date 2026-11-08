@@ -1,7 +1,7 @@
 // Run with: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addMissedFillers, analyze, isFiller, keepSegments, type Word } from "./pipeline";
+import { addMissedFillers, analyze, isFiller, keepSegments, withRetry, type Word } from "./pipeline";
 
 // 10 ms RMS frames: quiet room tone everywhere, loud where `loud` says.
 function level(seconds: number, loud: [number, number][]): number[] {
@@ -51,4 +51,21 @@ test("an added filler is counted and cut, and the real words around it are kept"
   const kept = (t: number) => segs.some((s) => t >= s.start && t <= s.end);
   assert.ok(!kept(1.35), "um audio should be cut");
   for (const x of words) assert.ok(kept((x.start + x.end) / 2), `"${x.text}" should be kept`);
+});
+
+test("withRetry: retries dropped sockets and 5xx, not 4xx", async () => {
+  let n = 0;
+  const flaky = async () => {
+    n++;
+    if (n === 1) throw new TypeError("fetch failed");
+    if (n === 2) return new Response("busy", { status: 502 });
+    return new Response("ok", { status: 200 });
+  };
+  assert.equal((await withRetry(flaky, 3, 1)).status, 200);
+  assert.equal(n, 3);
+  let m = 0;
+  const bad = async () => (m++, new Response("no", { status: 400 }));
+  assert.equal((await withRetry(bad, 3, 1)).status, 400);
+  assert.equal(m, 1);
+  await assert.rejects(withRetry(async () => { throw new TypeError("fetch failed"); }, 2, 1));
 });

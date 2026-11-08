@@ -63,13 +63,29 @@ const STT_MODEL = process.env.UMLESS_STT_MODEL || "elevenlabs/scribe-v2";
 const FILLER_MODEL = process.env.UMLESS_FILLER_MODEL ?? "nvidia/parakeet-tdt-0.6b-v3";
 const LLM_MODEL = process.env.UMLESS_LLM_MODEL || "openai/gpt-5-mini";
 
+// OpenRouter's transcription endpoint sometimes drops the connection ~200 ms into an upload ("fetch failed",
+// UND_ERR_SOCKET) and works on the next try. Retry network errors, 429 and 5xx twice with a short backoff.
+export async function withRetry(call: () => Promise<Response>, tries = 3, waitMs = 1500): Promise<Response> {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await call();
+      if (i < tries && (res.status === 429 || res.status >= 500)) {
+        await res.body?.cancel();
+      } else return res;
+    } catch (e) {
+      if (i >= tries) throw e;
+    }
+    await new Promise((r) => setTimeout(r, waitMs * i));
+  }
+}
+
 async function sttWords(wav: string, model: string): Promise<Word[]> {
   const form = new FormData();
   form.append("model", model);
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
   form.append("file", new Blob([new Uint8Array(await fs.readFile(wav))], { type: "audio/wav" }), path.basename(wav));
-  const res = await fetch(`${OR}/audio/transcriptions`, { method: "POST", headers: orHeaders(), body: form });
+  const res = await withRetry(() => fetch(`${OR}/audio/transcriptions`, { method: "POST", headers: orHeaders(), body: form }));
   if (!res.ok) throw new Error(`transcription failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
   return ((j.words || []) as { word: string; start: number; end: number }[])
