@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 // Open-source Umless CLI: cut ums, stutters, retakes and dead air from any video. Bring your own OpenRouter key (about $0.02 per 3-minute video).
-// Re-voicing in your own voice lives in the hosted app: https://umless.app
+// Hosted version (no install) and done-for-you cleanup: https://umless.thoufeekxlabs.com
 import path from "node:path";
 import { analyze, extractAudio, keepSegments, probe, renderCut, transcribe } from "../lib/pipeline";
 
@@ -23,7 +23,7 @@ async function main() {
     await renderCut(input, keepSegments(a), out, hasVideo);
     const d = (await probe(out)).duration;
     console.log(`\n✓ ${path.basename(out)}  ${duration.toFixed(1)}s → ${d.toFixed(1)}s`);
-    console.log("Want it re-recorded in your own voice, no stumbles? → https://umless.app");
+    console.log("No install for your team, or want us to do the edit? → https://umless.thoufeekxlabs.com/?ref=cli");
   }
   await import("node:fs/promises").then((fs) => fs.rm(wav, { force: true }));
 }
