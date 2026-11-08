@@ -1,8 +1,31 @@
 "use client";
 import { useState } from "react";
 import { Transcript } from "@/components/Transcript";
+import { TryError, TryProgress, TryResult } from "@/components/TryResult";
 import { EMAIL_OK, TryEmail } from "@/components/TryEmail";
 import { TRY, useJob } from "@/components/useJob";
+import { explainUpload, type Explained } from "@/lib/result";
+
+const MAX_MB = 200;
+const MAX_SEC = 600;
+
+// Checked in the browser before uploading, so an over-long clip doesn't use up the day's free try
+// (the server only learns the duration after the upload).
+function readDuration(f: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const v = document.createElement(f.type.startsWith("audio") ? "audio" : "video");
+    const url = URL.createObjectURL(f);
+    const done = (d: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve(d);
+    };
+    v.preload = "metadata";
+    v.onloadedmetadata = () => done(Number.isFinite(v.duration) ? v.duration : null);
+    v.onerror = () => done(null);
+    setTimeout(() => done(null), 5000);
+    v.src = url;
+  });
+}
 
 const MODES = [
   { id: "cut", name: "Clean Cut", desc: "Removes ums, stutters, retakes and dead air. Your real voice." },
@@ -19,14 +42,27 @@ const VOICES = [
 ];
 
 export default function Studio() {
-  const { job, error, busy, start } = useJob();
+  const { job, error, busy, start, uploadPct, startedAt } = useJob();
   const [file, setFile] = useState<File | null>(null);
+  const [fileErr, setFileErr] = useState<Explained | null>(null);
   const [mode, setMode] = useState("cut");
   const [voice, setVoice] = useState("me");
   const [email, setEmail] = useState("");
   const modes = TRY ? MODES.filter((m) => m.id !== "revoice") : MODES;
-  const ready = !!file && !busy && (!TRY || EMAIL_OK(email));
+  const ready = !!file && !fileErr && !busy && (!TRY || EMAIL_OK(email));
   const s = job?.stats;
+  const running = busy || (!!job && job.status !== "done" && job.status !== "error");
+  const go = () => file && start(file, mode, voice, email);
+
+  async function pick(f: File | null) {
+    setFile(f);
+    setFileErr(null);
+    if (!f || !TRY) return;
+    if (f.size > MAX_MB * 1024 * 1024) return setFileErr(explainUpload(413));
+    const d = await readDuration(f);
+    if (d && d > MAX_SEC)
+      setFileErr({ title: `This clip is ${Math.round(d / 60)} minutes long.`, detail: "The free try takes up to 10 minutes. Trim it first, or have the full video cleaned for you.", next: "order" });
+  }
 
   return (
     <>
@@ -52,33 +88,41 @@ export default function Studio() {
       )}
 
       <div className="drop" style={{ marginTop: 20 }}>
-        <input type="file" accept="video/*,audio/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <input type="file" accept="video/*,audio/*" onChange={(e) => void pick(e.target.files?.[0] || null)} />
         <TryEmail email={email} setEmail={setEmail} />
         <div style={{ marginTop: 16 }}>
-          <button className="btn" disabled={!ready} onClick={() => file && start(file, mode, voice, email)}>
-            {busy ? job?.step || "Uploading…" : TRY ? "Clean my clip free" : "Fix my video"}
+          <button className="btn" disabled={!ready} onClick={go}>
+            {running ? "Working…" : TRY ? "Clean my clip free" : "Fix my video"}
           </button>
+          {TRY && !file && <p className="small muted" style={{ margin: "8px 0 0" }}>Pick a clip and enter your email to start.</p>}
+          {TRY && file && !EMAIL_OK(email) && !fileErr && <p className="small muted" style={{ margin: "8px 0 0" }}>Enter your email to start.</p>}
         </div>
       </div>
-      {error && <p style={{ color: "var(--accent)" }}>{error}</p>}
+      {fileErr && <TryError e={fileErr} />}
+      {error && <TryError e={error} onRetry={file ? go : undefined} />}
+      {running && <TryProgress job={job} mode={mode} uploadPct={uploadPct} startedAt={startedAt} />}
 
       {job?.status === "done" && job.output && s && (
         <>
-          <h2>
-            Done. {s.fillerCount + s.repeatCount + s.retakeCount} mistakes and {Math.round(s.savedSec || 0)}s of waffle removed.
-          </h2>
-          <div className="ba">
+          {TRY ? (
+            <TryResult job={job} />
+          ) : (
+            <h2>
+              Done. {s.fillerCount + s.repeatCount + s.retakeCount} mistakes and {Math.round(s.savedSec || 0)}s of waffle removed.
+            </h2>
+          )}
+          <div className="ba" style={{ marginTop: 24 }}>
             <div>
               <span className="tag">Before · {Math.round(job.duration || 0)}s</span>
-              <video src={`/api/jobs/${job.id}/file?v=original`} controls preload="metadata" />
+              <video src={`/api/jobs/${job.id}/file?v=original`} controls playsInline preload="metadata" />
             </div>
             <div>
               <span className="tag hot">After · {Math.round(s.outDuration || 0)}s</span>
-              <video src={`/api/jobs/${job.id}/file`} controls preload="metadata" />
+              <video src={`/api/jobs/${job.id}/file`} controls playsInline preload="metadata" />
             </div>
           </div>
           <p className="row" style={{ marginTop: 16 }}>
-            <a className="btn" href={`/api/jobs/${job.id}/file?download`}>Download</a>
+            <a className={TRY ? "btn ghost" : "btn"} href={`/api/jobs/${job.id}/file?download`}>Download the clean clip</a>
             {job.voiceUsed && <span className="small muted">Voice: {job.voiceUsed}</span>}
           </p>
           {job.lines && (

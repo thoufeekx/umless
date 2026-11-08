@@ -2,6 +2,9 @@
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { FILLERS, isFiller, norm, umScore } from "./score";
+
+export { isFiller, umScore };
 
 export type Word = { text: string; start: number; end: number };
 export type Cut = { start: number; end: number; reason: "filler" | "repeat" | "retake" | "pause" };
@@ -19,12 +22,10 @@ export type Analysis = {
 };
 export type Segment = { start: number; end: number };
 
-const FILLERS = new Set(["um", "umm", "uh", "uhh", "uhm", "erm", "er", "ah", "ahh", "hmm", "mm", "mhm", "eh"]);
 const MAX_GAP = 0.45; // longest silence we keep between words
 const KEEP_GAP = 0.25; // silence left behind when we shrink a long pause
 const PAD = 0.04;
 
-const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9']/g, "");
 
 export function run(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -86,7 +87,6 @@ export async function transcribe(wav: string): Promise<Word[]> {
   return addMissedFillers(words, hints, frameRms(await readPcm(wav)));
 }
 
-export const isFiller = (t: string) => FILLERS.has(norm(t));
 
 const FRAME = 0.01; // seconds per RMS frame
 const HINT_MIN_GAP = 0.25; // fillers squeezed into shorter gaps were mostly mis-timed real words in the eval
@@ -251,10 +251,7 @@ export async function analyze(words: Word[], duration: number, useAI = true): Pr
   const fillerCount = reasons.filter((r) => r === "filler").length;
   const repeatCount = reasons.filter((r) => r === "repeat").length;
   const retakeCount = reasons.filter((r) => r === "retake").length;
-  const minutes = Math.max(duration / 60, 0.1);
-  const fillersPerMin = fillerCount / minutes;
-  // Calibrated so a polished speaker lands ~90+, a typical nervous one-take demo ~40-60.
-  const penalty = fillersPerMin * 2.5 + ((repeatCount + retakeCount) / minutes) * 1 + (deadAir / duration) * 50;
+  const fillersPerMin = fillerCount / Math.max(duration / 60, 0.1);
   return {
     duration,
     words,
@@ -264,7 +261,7 @@ export async function analyze(words: Word[], duration: number, useAI = true): Pr
     retakeCount,
     deadAirSec: Math.round(deadAir * 10) / 10,
     fillersPerMin: Math.round(fillersPerMin * 10) / 10,
-    score: Math.max(0, Math.min(100, Math.round(100 - penalty))),
+    score: umScore({ fillerCount, stumbleCount: repeatCount + retakeCount, deadAirSec: deadAir, duration }),
     topFillers: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3),
   };
 }
