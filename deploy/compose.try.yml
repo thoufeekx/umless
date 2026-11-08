@@ -1,0 +1,32 @@
+# Public free try on the laptop: prod build with UMLESS_PUBLIC_TRY=1 caps (lib/trygate.ts), bound to localhost only.
+# Public path: https://umless-app.thoufeekxlabs.com (Cloudflare Worker, site/app-proxy) -> Tailscale Funnel -> 127.0.0.1:3211.
+# Large uploads go straight to the Funnel URL (NEXT_PUBLIC_UPLOAD_ORIGIN) to skip the Worker's 100 MB request cap.
+name: umless-prod
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "2"}
+
+services:
+  web:
+    image: umless-app:prod
+    env_file: [.env]
+    volumes: [data:/app/data]  # waitlist, events, try ledger and 24-hour job files
+    ports: ["127.0.0.1:3211:3210"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3210/robots.txt').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 1500m  # two concurrent 200 MB uploads are buffered in memory
+    cpus: 1.5
+    labels: {com.umless: "1", com.umless.env: prod}
+    <<: *logs
+
+volumes:
+  data: {labels: {com.umless: "1", com.umless.env: prod}}
+
+networks:
+  default: {labels: {com.umless: "1", com.umless.env: prod}}

@@ -72,6 +72,16 @@ async function sweepOldJobs() {
   }
 }
 
+// Also sweep on a timer, so files go away after 24 hours even when nobody uploads.
+const g = globalThis as { umlessSweep?: NodeJS.Timeout };
+if (!g.umlessSweep && process.env.NEXT_PHASE !== "phase-production-build") {
+  g.umlessSweep = setInterval(() => void sweepOldJobs(), 30 * 60 * 1000);
+  g.umlessSweep.unref?.();
+}
+
+let running = 0;
+export const runningJobs = () => running;
+
 export async function createJob(file: File, mode: Mode, voice: string): Promise<Job> {
   void sweepOldJobs();
   const id = randomUUID();
@@ -85,6 +95,15 @@ export async function createJob(file: File, mode: Mode, voice: string): Promise<
 }
 
 async function runJob(job: Job) {
+  running++;
+  try {
+    await runJobInner(job);
+  } finally {
+    running--;
+  }
+}
+
+async function runJobInner(job: Job) {
   const dir = jobDir(job.id);
   const input = path.join(dir, job.inputName);
   const step = async (s: string) => {
