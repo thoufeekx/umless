@@ -4,15 +4,17 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { buildEdl, parseFps } from "../lib/export-edl";
-import { analyze, extractAudio, keepSegments, probe, renderCut, transcribe } from "../lib/pipeline";
+import { buildFcpxml, buildXmeml, type MediaInfo } from "../lib/export-xml";
+import { analyze, extractAudio, keepSegments, parseRate, probe, renderCut, transcribe } from "../lib/pipeline";
 
 async function main() {
   const [input, ...flags] = process.argv.slice(2);
   if (!input || !process.env.OPENROUTER_API_KEY) {
-    console.log("usage: OPENROUTER_API_KEY=... umless <video|audio> [--score] [--edl]\n  --edl  also write <name>.umless.edl (CMX 3600) for Premiere, Resolve, Avid\n  Get a key at https://openrouter.ai/keys");
+    console.log("usage: OPENROUTER_API_KEY=... umless <video|audio> [--score] [--edl] [--xml] [--fcpxml]\n  --edl     also write <name>.umless.edl (CMX 3600) for Premiere, Resolve, Avid\n  --xml     also write <name>.umless.xml (FCP7 XML) for Premiere Pro, DaVinci Resolve\n  --fcpxml  also write <name>.umless.fcpxml (FCPXML 1.10) for Final Cut Pro, DaVinci Resolve\n  Get a key at https://openrouter.ai/keys");
     process.exit(1);
   }
-  const { duration, hasVideo, frameRate, timecode } = await probe(input);
+  const info = await probe(input);
+  const { duration, hasVideo, frameRate, timecode } = info;
   const base = input.replace(/\.[^.]+$/, "");
   const wav = `${base}.umless.wav`;
   await extractAudio(input, wav);
@@ -32,6 +34,28 @@ async function main() {
       await fs.writeFile(edl, text);
       const events = text.split("\n").filter((l) => /^\d{3} /.test(l)).length;
       console.log(`✓ ${path.basename(edl)}  ${events} events at ${Number(opts.fps.toFixed(3))} fps${/^FCM: DROP/m.test(text) ? " drop-frame" : ""}`);
+    }
+    const media: MediaInfo = {
+      path: path.resolve(input),
+      name: path.basename(input),
+      rate: parseRate(frameRate),
+      hasVideo,
+      width: info.width,
+      height: info.height,
+      sampleRate: info.sampleRate,
+      channels: info.channels,
+      durationSec: duration,
+      sourceTimecode: timecode,
+    };
+    const timeline = { title: path.basename(base) + ".umless" };
+    for (const [flag, ext, build, label] of [
+      ["--xml", "xml", buildXmeml, "FCP7 XML"],
+      ["--fcpxml", "fcpxml", buildFcpxml, "FCPXML 1.10"],
+    ] as const) {
+      if (!flags.includes(flag)) continue;
+      const file = `${base}.umless.${ext}`;
+      await fs.writeFile(file, build(segs, media, timeline));
+      console.log(`✓ ${path.basename(file)}  ${label}, ${segs.length} clips on ${hasVideo ? "V1+A1" : "A1"}`);
     }
     console.log("Want it re-recorded in your own voice, no stumbles? → https://umless.app");
   }
