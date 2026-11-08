@@ -2,6 +2,9 @@
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { FILLERS, isFiller, norm, umScore } from "./score";
+
+export { isFiller, umScore };
 
 export type Word = { text: string; start: number; end: number };
 export type Cut = { start: number; end: number; reason: "filler" | "repeat" | "retake" | "pause" };
@@ -19,12 +22,10 @@ export type Analysis = {
 };
 export type Segment = { start: number; end: number };
 
-const FILLERS = new Set(["um", "umm", "uh", "uhh", "uhm", "erm", "er", "ah", "ahh", "hmm", "mm", "mhm", "eh"]);
 const MAX_GAP = 0.45; // longest silence we keep between words
 const KEEP_GAP = 0.25; // silence left behind when we shrink a long pause
 const PAD = 0.04;
 
-const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9']/g, "");
 
 export function run(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -62,13 +63,29 @@ const STT_MODEL = process.env.UMLESS_STT_MODEL || "elevenlabs/scribe-v2";
 const FILLER_MODEL = process.env.UMLESS_FILLER_MODEL ?? "nvidia/parakeet-tdt-0.6b-v3";
 const LLM_MODEL = process.env.UMLESS_LLM_MODEL || "openai/gpt-5-mini";
 
+// OpenRouter's transcription endpoint sometimes drops the connection ~200 ms into an upload ("fetch failed",
+// UND_ERR_SOCKET) and works on the next try. Retry network errors, 429 and 5xx twice with a short backoff.
+export async function withRetry(call: () => Promise<Response>, tries = 3, waitMs = 1500): Promise<Response> {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await call();
+      if (i < tries && (res.status === 429 || res.status >= 500)) {
+        await res.body?.cancel();
+      } else return res;
+    } catch (e) {
+      if (i >= tries) throw e;
+    }
+    await new Promise((r) => setTimeout(r, waitMs * i));
+  }
+}
+
 async function sttWords(wav: string, model: string): Promise<Word[]> {
   const form = new FormData();
   form.append("model", model);
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
   form.append("file", new Blob([new Uint8Array(await fs.readFile(wav))], { type: "audio/wav" }), path.basename(wav));
-  const res = await fetch(`${OR}/audio/transcriptions`, { method: "POST", headers: orHeaders(), body: form });
+  const res = await withRetry(() => fetch(`${OR}/audio/transcriptions`, { method: "POST", headers: orHeaders(), body: form }));
   if (!res.ok) throw new Error(`transcription failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
   return ((j.words || []) as { word: string; start: number; end: number }[])
@@ -86,7 +103,6 @@ export async function transcribe(wav: string): Promise<Word[]> {
   return addMissedFillers(words, hints, frameRms(await readPcm(wav)));
 }
 
-export const isFiller = (t: string) => FILLERS.has(norm(t));
 
 const FRAME = 0.01; // seconds per RMS frame
 const HINT_MIN_GAP = 0.25; // fillers squeezed into shorter gaps were mostly mis-timed real words in the eval
@@ -251,10 +267,7 @@ export async function analyze(words: Word[], duration: number, useAI = true): Pr
   const fillerCount = reasons.filter((r) => r === "filler").length;
   const repeatCount = reasons.filter((r) => r === "repeat").length;
   const retakeCount = reasons.filter((r) => r === "retake").length;
-  const minutes = Math.max(duration / 60, 0.1);
-  const fillersPerMin = fillerCount / minutes;
-  // Calibrated so a polished speaker lands ~90+, a typical nervous one-take demo ~40-60.
-  const penalty = fillersPerMin * 2.5 + ((repeatCount + retakeCount) / minutes) * 1 + (deadAir / duration) * 50;
+  const fillersPerMin = fillerCount / Math.max(duration / 60, 0.1);
   return {
     duration,
     words,
@@ -264,7 +277,7 @@ export async function analyze(words: Word[], duration: number, useAI = true): Pr
     retakeCount,
     deadAirSec: Math.round(deadAir * 10) / 10,
     fillersPerMin: Math.round(fillersPerMin * 10) / 10,
-    score: Math.max(0, Math.min(100, Math.round(100 - penalty))),
+    score: umScore({ fillerCount, stumbleCount: repeatCount + retakeCount, deadAirSec: deadAir, duration }),
     topFillers: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3),
   };
 }

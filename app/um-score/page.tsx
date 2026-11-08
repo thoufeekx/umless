@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ScoreCard } from "@/components/ScoreCard";
 import { Transcript } from "@/components/Transcript";
 import { EMAIL_OK, TryEmail } from "@/components/TryEmail";
+import { TryError } from "@/components/TryResult";
 import { TRY, useJob } from "@/components/useJob";
 import { Waitlist } from "@/components/Waitlist";
 
@@ -27,7 +28,7 @@ export default function UmScore() {
         </div>
         <p className="small muted">Up to 10 minutes. Files are deleted after 24 hours.</p>
       </div>
-      {error && <p style={{ color: "var(--accent)" }}>{error}</p>}
+      {error && <TryError e={error} onRetry={file ? () => start(file, "score", "me", email) : undefined} />}
 
       {s && job?.status === "done" && (
         <>

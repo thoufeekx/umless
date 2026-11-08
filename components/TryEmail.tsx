@@ -21,7 +21,8 @@ export function TryEmail({ email, setEmail }: { email: string; setEmail: (e: str
           setEmail(e.target.value);
           localStorage.setItem("umless_email", e.target.value.trim());
         }}
-        style={{ padding: "10px 12px", minWidth: 260, borderRadius: 8, border: "1px solid var(--line, #ccc)" }}
+        aria-label="Your email"
+        style={{ padding: "10px 12px", width: "100%", maxWidth: 340, borderRadius: 8, border: "1px solid var(--line, #ccc)" }}
       />
       <p className="small muted" style={{ margin: "6px 0 0" }}>
         Free try: 1 clip per day, up to 10 minutes and 200 MB. Your email joins the Umless list; unsubscribe any time. Files are deleted after 24 hours.
