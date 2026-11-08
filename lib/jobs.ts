@@ -44,6 +44,7 @@ export type Job = {
   lines?: { original: string; polished: string }[];
   output?: string;
   voiceUsed?: string;
+  refunded?: boolean; // free try: the daily clip was given back because processing failed
 };
 
 export const MAX_FREE_SEC = 600;
@@ -82,7 +83,8 @@ if (!g.umlessSweep && process.env.NEXT_PHASE !== "phase-production-build") {
 let running = 0;
 export const runningJobs = () => running;
 
-export async function createJob(file: File, mode: Mode, voice: string): Promise<Job> {
+// onFail runs if processing fails (the free try gives the visitor's daily clip back).
+export async function createJob(file: File, mode: Mode, voice: string, onFail?: () => Promise<void>): Promise<Job> {
   void sweepOldJobs();
   const id = randomUUID();
   await fs.mkdir(jobDir(id), { recursive: true });
@@ -90,14 +92,19 @@ export async function createJob(file: File, mode: Mode, voice: string): Promise<
   await fs.writeFile(path.join(jobDir(id), "input" + ext), Buffer.from(await file.arrayBuffer()));
   const job: Job = { id, mode, voice, status: "queued", step: "Uploaded", createdAt: new Date().toISOString(), inputName: "input" + ext };
   await save(job);
-  void runJob(job);
+  void runJob(job, onFail);
   return job;
 }
 
-async function runJob(job: Job) {
+async function runJob(job: Job, onFail?: () => Promise<void>) {
   running++;
   try {
     await runJobInner(job);
+    if (job.status === "error" && onFail) {
+      await onFail().catch(() => {});
+      job.refunded = true;
+      await save(job);
+    }
   } finally {
     running--;
   }

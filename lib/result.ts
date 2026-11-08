@@ -96,3 +96,12 @@ export function explainUpload(status: number, serverMsg = ""): Explained {
   if (status === 400 || status === 411) return { title: msg || "Something is missing.", detail: "Pick a video or audio file and enter your email.", next: "fix" };
   return { title: "Upload failed.", detail: msg || "Try again in a minute.", next: "retry" };
 }
+
+// A failed job (lib/jobs.ts) in plain words. Network/provider errors aren't the visitor's fault.
+export function explainJobError(err = "", refunded = false): Explained {
+  const service = /fetch failed|ECONN|ETIMEDOUT|timeout|aborted|socket|\b5\d\d\b|rate limit|429/i.test(err);
+  const back = refunded ? " Your free clip wasn't used, so you can try again." : "";
+  if (service)
+    return { title: "Our speech-to-text service didn't respond.", detail: `That's on our side, not your clip.${back}`, next: "retry" };
+  return { title: "We couldn't clean this clip.", detail: `${err || "Something went wrong while processing."}${back} Try a different clip, or have the full video cleaned for you.`, next: "order" };
+}

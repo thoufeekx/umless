@@ -1,7 +1,7 @@
 // Tests for the free-try result screen math and error copy (npm test).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { explainUpload, fmtSec, shareText, summarize } from "./result";
+import { explainJobError, explainUpload, fmtSec, shareText, summarize } from "./result";
 import { umScore } from "./score";
 
 const job = {
@@ -52,4 +52,14 @@ test("cap rejections are explained with a next step", () => {
 test("umScore matches the old inline formula", () => {
   // 3 fillers + 2 stumbles + 3s dead air in 60s: 100 - (7.5 + 2 + 2.5) = 88
   assert.equal(umScore({ fillerCount: 3, stumbleCount: 2, deadAirSec: 3, duration: 60 }), 88);
+});
+
+test("job failures: provider errors are ours, file errors say what to do", () => {
+  const net = explainJobError("fetch failed", true);
+  assert.equal(net.next, "retry");
+  assert.match(net.detail, /wasn't used/);
+  assert.doesNotMatch(net.title + net.detail, /fetch failed/);
+  const file = explainJobError("We couldn't hear any speech in this file.");
+  assert.equal(file.next, "order");
+  assert.match(file.detail, /couldn't hear any speech/);
 });

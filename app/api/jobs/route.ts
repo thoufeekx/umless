@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       await release?.();
       return bad!;
     }
-    const job = await createJob(file, mode, voice);
+    const job = await createJob(file, mode, voice, release ?? undefined);
     if (publicTry()) recordTryEmail(req.headers.get("x-umless-email") || "");
     return Response.json({ id: job.id }, { headers });
   } catch {

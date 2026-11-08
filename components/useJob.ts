@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import { track } from "@/components/Track";
-import { explainUpload, type Explained } from "@/lib/result";
+import { explainJobError, explainUpload, type Explained } from "@/lib/result";
 
 // Hosted free try (NEXT_PUBLIC_TRY=1): an email is required and big uploads go straight to the tunnel origin.
 export const TRY = process.env.NEXT_PUBLIC_TRY === "1";
@@ -87,8 +87,6 @@ export function useJob() {
     return () => clearTimeout(t);
   }, [job]);
 
-  const jobErr: Explained | null = job?.status === "error"
-    ? { title: "We couldn't clean this clip.", detail: `${job.error || "Something went wrong while processing."} Try a different clip, or have the full video cleaned for you.`, next: "order" }
-    : null;
+  const jobErr: Explained | null = job?.status === "error" ? explainJobError(job.error, job.refunded) : null;
   return { job, error: error || jobErr, busy, start, uploadPct, startedAt };
 }
