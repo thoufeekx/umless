@@ -38,7 +38,9 @@ test("share line has the score and the ref=share link", () => {
 });
 
 test("cap rejections are explained with a next step", () => {
-  assert.equal(explainUpload(429, "You've used today's free clip. Come back tomorrow.").next, "order");
+  const used = explainUpload(429, "You've used today's free clip. Come back tomorrow.");
+  assert.equal(used.next, "order");
+  assert.doesNotMatch(used.detail, /used today's free clip/, "title isn't repeated in the detail");
   assert.equal(explainUpload(429, "Too many requests. Wait a minute and try again.").next, "retry");
   assert.equal(explainUpload(503, "Busy cleaning other videos right now. Try again in a couple of minutes.").next, "retry");
   assert.equal(explainUpload(503, "The free tier is full for today.").next, "order");

@@ -1,7 +1,7 @@
 "use client";
 // The free-try flow around the upload box: progress while it runs, plain-words errors, and the result screen
 // (before/after numbers, a share line for the Um Score, and the two next steps).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Job } from "@/lib/jobs";
 import { fmtSec, MCP_URL, ORDER_URL, shareText, summarize, type Explained } from "@/lib/result";
 import { track } from "@/components/Track";
@@ -35,7 +35,7 @@ export function TryProgress({ job, mode, uploadPct, startedAt }: { job: Job | nu
         ))}
       </ol>
       <p className="small muted" style={{ margin: "10px 0 0" }}>
-        {secs !== null ? `${fmtSec(secs)} so far. ` : ""}A short clip usually takes 1 to 3 minutes. Keep this tab open; this page&apos;s link also works for 24 hours.
+        {secs !== null ? `${fmtSec(secs)} so far. ` : ""}A 30-second clip takes about a minute. Keep this tab open; this page&apos;s link also works for 24 hours.
       </p>
     </div>
   );
@@ -63,6 +63,9 @@ export function TryError({ e, onRetry }: { e: Explained; onRetry?: () => void })
 export function TryResult({ job }: { job: Job }) {
   const m = summarize(job);
   const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+  // The upload box stays on top, so bring the result into view (on a phone it's far below the fold).
+  useEffect(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), [job.id]);
   if (!m) return null;
   const line = shareText(m);
   const copy = async () => {
@@ -82,7 +85,7 @@ export function TryResult({ job }: { job: Job }) {
   const stumbles = m.repeats + m.retakes;
 
   return (
-    <section className="result">
+    <section className="result" ref={ref}>
       <p className="eyebrow">Done</p>
       <h2>
         {fmtSec(m.beforeSec)} → {fmtSec(m.afterSec)}

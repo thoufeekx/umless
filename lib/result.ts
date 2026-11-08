@@ -80,7 +80,7 @@ export function explainUpload(status: number, serverMsg = ""): Explained {
   if (status === 429)
     return {
       title: "You've used today's free clip.",
-      detail: `${msg || "The free try is 1 clip per day."} The free limit resets at midnight UTC. Want the full video cleaned today? We do it for you and you pay after delivery.`,
+      detail: `${/used today's free clip/i.test(msg) || !msg ? "The free try is 1 clip per email per day." : msg} It resets at midnight UTC. Want the full video cleaned today? We do it for you and you pay after delivery.`,
       next: "order",
     };
   if (status === 503)
