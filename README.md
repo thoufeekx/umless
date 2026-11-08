@@ -17,6 +17,7 @@ git clone https://github.com/thoufeekx/umless && cd umless && npm install
 OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4          # writes my-video.umless.mp4
 OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4 --score  # Um Score only, no render
 OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4 --edl    # also writes my-video.umless.edl
+OPENROUTER_API_KEY=... npx tsx cli/umless.ts my-video.mp4 --xml --fcpxml  # editable timelines, see below
 ```
 
 The terminal prints an Um Score (ums per minute, stutters and retakes, seconds of dead air), your transcript with every cut word struck through, and the before/after length. Audio files work too and come out as `.m4a`.
@@ -31,7 +32,14 @@ The terminal prints an Um Score (ums per minute, stutters and retakes, seconds o
 
 ## Finish in your editor
 
-Add `--edl` to also write `my-video.umless.edl` next to the render: an EDL (CMX 3600) for Premiere, Resolve, Avid, with one event per kept segment pointing at your original file, so you can keep editing instead of taking our render. Frame rate and start timecode come from the source (30 fps and 00:00:00:00 if they can't be read); 29.97 and 59.94 use drop-frame timecode unless the file's own timecode is non-drop, 23.976 is non-drop. Cut points are snapped to whole frames, so the EDL and the render contain exactly the same frames. FCPXML is still planned.
+Add `--edl` to also write `my-video.umless.edl` next to the render: an EDL (CMX 3600) for Premiere, Resolve, Avid, with one event per kept segment pointing at your original file, so you can keep editing instead of taking our render. Frame rate and start timecode come from the source (30 fps and 00:00:00:00 if they can't be read); 29.97 and 59.94 use drop-frame timecode unless the file's own timecode is non-drop, 23.976 is non-drop. Cut points are snapped to whole frames, so the EDL and the render contain exactly the same frames.
+
+For a real editable timeline instead of an event list:
+
+- `--xml` writes `my-video.umless.xml` (FCP7 XML / xmeml). In Premiere Pro: File > Import. In DaVinci Resolve: File > Import > Timeline.
+- `--fcpxml` writes `my-video.umless.fcpxml` (FCPXML 1.10). In Final Cut Pro: File > Import > XML. Resolve imports it too.
+
+Both put every kept segment on V1 + A1 as a clip of your original file, at the source frame rate and timecode, starting at 01:00:00:00. If you moved the file, relink it in the editor.
 
 ## How it works
 
@@ -56,7 +64,7 @@ Most filler-word removers are closed. You can't see why a word was cut, and you 
 ## Roadmap
 
 - `npx umless`, with no clone needed
-- FCPXML timeline export for Final Cut Pro and Kdenlive (EDL is already in, see `--edl`)
+- Kdenlive / OpenTimelineIO export (EDL, FCP7 XML and FCPXML are in, see `--edl`, `--xml`, `--fcpxml`)
 - A `--json` cut list and an MCP server for agents and automation pipelines
 - A local transcription option (whisper.cpp)
 

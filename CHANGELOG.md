@@ -5,7 +5,9 @@ All notable changes to Umless are listed here. The format follows [Keep a Change
 ## [Unreleased]
 
 ### Added
-- `--edl`: writes `<name>.umless.edl` next to the render, an EDL (CMX 3600) for Premiere, Resolve, Avid with one event per kept segment, source timecodes from the original file and back-to-back record timecodes from 01:00:00:00. Frame rate and the source's timecode track come from `ffprobe` (30 fps / 00:00:00:00 fallback); 29.97 and 59.94 are drop-frame unless the source timecode is non-drop. Renders now cut on whole source frames, so the EDL matches the rendered file frame for frame. FCPXML is still planned (#2).
+- `--edl`: writes `<name>.umless.edl` next to the render, an EDL (CMX 3600) for Premiere, Resolve, Avid with one event per kept segment, source timecodes from the original file and back-to-back record timecodes from 01:00:00:00. Frame rate and the source's timecode track come from `ffprobe` (30 fps / 00:00:00:00 fallback); 29.97 and 59.94 are drop-frame unless the source timecode is non-drop. Renders now cut on whole source frames, so the EDL matches the rendered file frame for frame.
+- `--xml`: writes `<name>.umless.xml`, an FCP7 XML (xmeml v4) sequence for Premiere Pro and DaVinci Resolve, with each kept segment as a linked clip on V1 + A1 that references the original media.
+- `--fcpxml`: writes `<name>.umless.fcpxml`, an FCPXML 1.10 project for Final Cut Pro and DaVinci Resolve, same clips on the primary storyline with exact rational frame times (#2).
 - `npm test` runs the unit tests (`node:test` via `tsx`).
 
 Planned (see [issues](https://github.com/thoufeekx/umless/issues)):

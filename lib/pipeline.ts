@@ -40,13 +40,23 @@ export function run(cmd: string, args: string[]): Promise<string> {
 export async function probe(file: string) {
   const out = await run("ffprobe", [
     "-v", "error",
-    "-show_entries", "format=duration:format_tags=timecode:stream=codec_type,avg_frame_rate,r_frame_rate:stream_tags=timecode",
+    "-show_entries", "format=duration:format_tags=timecode:stream=codec_type,avg_frame_rate,r_frame_rate,width,height,sample_rate,channels:stream_tags=timecode",
     "-of", "json", file,
   ]);
   const j = JSON.parse(out);
-  type S = { codec_type: string; avg_frame_rate?: string; r_frame_rate?: string; tags?: { timecode?: string } };
+  type S = {
+    codec_type: string;
+    avg_frame_rate?: string;
+    r_frame_rate?: string;
+    width?: number;
+    height?: number;
+    sample_rate?: string;
+    channels?: number;
+    tags?: { timecode?: string };
+  };
   const streams = (j.streams || []) as S[];
   const video = streams.find((s) => s.codec_type === "video");
+  const audio = streams.find((s) => s.codec_type === "audio");
   const rate = video && video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video?.r_frame_rate;
   // Camera / NLE start timecode: on the video stream, a QuickTime tmcd data stream, or the container.
   const timecode = video?.tags?.timecode || streams.find((s) => s.tags?.timecode)?.tags?.timecode || j.format.tags?.timecode;
@@ -55,6 +65,10 @@ export async function probe(file: string) {
     hasVideo: !!video,
     frameRate: rate, // ffprobe string like "30000/1001"; undefined for audio
     timecode: timecode as string | undefined, // e.g. "01:00:00;00" (";" = drop-frame); undefined if untagged
+    width: video?.width,
+    height: video?.height,
+    sampleRate: audio?.sample_rate ? Number(audio.sample_rate) : undefined,
+    channels: audio?.channels,
   };
 }
 
