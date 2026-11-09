@@ -63,3 +63,15 @@ test("job failures: provider errors are ours, file errors say what to do", () =>
   assert.equal(file.next, "order");
   assert.match(file.detail, /couldn't hear any speech/);
 });
+
+test("explainJobError: provider billing errors are ours and never leak", () => {
+  const broke = explainJobError('transcription failed: 402 {"error":{"message":"Insufficient credits"}}', true);
+  assert.equal(broke.next, "order");
+  assert.match(broke.title, /paused on our side/);
+  assert.match(broke.detail, /wasn't used/);
+  assert.doesNotMatch(broke.title + broke.detail, /402|credits|\{/);
+  const nokey = explainJobError("OPENROUTER_API_KEY is not set. Get a key at https://openrouter.ai/keys");
+  assert.doesNotMatch(nokey.title + nokey.detail, /OPENROUTER|openrouter\.ai/);
+  const raw = explainJobError('model call failed: 400 {"error":"bad"}');
+  assert.doesNotMatch(raw.detail, /400|\{/);
+});

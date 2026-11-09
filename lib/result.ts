@@ -101,7 +101,13 @@ export function explainUpload(status: number, serverMsg = ""): Explained {
 export function explainJobError(err = "", refunded = false): Explained {
   const service = /fetch failed|ECONN|ETIMEDOUT|timeout|aborted|socket|\b5\d\d\b|rate limit|429/i.test(err);
   const back = refunded ? " Your free clip wasn't used, so you can try again." : "";
+  // Provider billing/auth problems (OpenRouter 401/402, out of credits, missing key) are ours too, and a retry won't help.
+  const paused = /failed: 40[123]\b|insufficient|credits|payment required|API_KEY is not set/i.test(err);
+  if (paused)
+    return { title: "The free cleaner is paused on our side.", detail: `That's not your clip.${back} Try again later, or have the full video cleaned for you.`, next: "order" };
   if (service)
     return { title: "Our speech-to-text service didn't respond.", detail: `That's on our side, not your clip.${back}`, next: "retry" };
-  return { title: "We couldn't clean this clip.", detail: `${err || "Something went wrong while processing."}${back} Try a different clip, or have the full video cleaned for you.`, next: "order" };
+  // Raw provider responses ("model call failed: 400 {json}") aren't for visitors.
+  const shown = /failed: \d{3}/.test(err) ? "" : err;
+  return { title: "We couldn't clean this clip.", detail: `${shown || "Something went wrong while processing."}${back} Try a different clip, or have the full video cleaned for you.`, next: "order" };
 }
