@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildCutList, defaultOutput } from "./cutlist";
+import { buildCutJson, buildCutList, defaultOutput } from "./cutlist";
 import { analyze, type Word } from "./pipeline";
 
 const w = (text: string, start: number, end: number): Word => ({ text, start, end });
@@ -70,6 +70,39 @@ test("a file with no words is one silence cut", async () => {
   assert.equal(cl.cuts.length, 1);
   assert.equal(cl.cuts[0].type, "silence");
   assert.equal(cl.durationAfter, 0);
+});
+
+test("--json shape: duration, score, keep and cuts with numeric seconds", async () => {
+  const a = await analyze(words, DURATION, false);
+  const j = buildCutJson(a);
+  const cl = buildCutList(a);
+
+  assert.deepEqual(Object.keys(j), ["duration", "score", "keep", "cuts"]);
+  assert.equal(j.duration, 6.2);
+  assert.equal(j.score, a.score);
+  assert.deepEqual(j.keep, cl.keep);
+  assert.ok(j.keep.length > 0);
+  for (const k of j.keep) {
+    assert.deepEqual(Object.keys(k), ["start", "end"]);
+    assert.ok(typeof k.start === "number" && typeof k.end === "number" && k.end > k.start);
+  }
+  assert.equal(j.cuts.length, cl.cuts.length);
+  for (const c of j.cuts) {
+    assert.deepEqual(Object.keys(c), ["start", "end", "text", "reason"]);
+    assert.ok(typeof c.start === "number" && typeof c.end === "number");
+  }
+  const um = j.cuts.find((c) => c.text === "um");
+  assert.ok(um, "the um is in the cut list");
+  assert.equal(um.reason, `filler word "um"`);
+
+  // Survives a JSON round trip unchanged, so `--json | jq .keep` sees plain numbers.
+  assert.deepEqual(JSON.parse(JSON.stringify(j)), j);
+});
+
+test("--json for a file with no words keeps nothing", async () => {
+  const j = buildCutJson(await analyze([], 3, false));
+  assert.deepEqual(j.keep, []);
+  assert.deepEqual(j.cuts.map(({ start, end }) => [start, end]), [[0, 3]]);
 });
 
 test("default output sits next to the input", () => {

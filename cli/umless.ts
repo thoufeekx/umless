@@ -2,12 +2,16 @@
 // Open-source Umless CLI: cut ums, stutters, retakes and dead air from any video. Bring your own OpenRouter key (about $0.02 per 3-minute video).
 // Re-voicing in your own voice lives in the hosted app: https://umless.app
 import path from "node:path";
+import { buildCutJson } from "../lib/cutlist";
 import { analyze, extractAudio, keepSegments, probe, renderCut, transcribe } from "../lib/pipeline";
 
 async function main() {
   const [input, ...flags] = process.argv.slice(2);
+  const json = flags.includes("--json");
+  // With --json, stdout carries only the JSON; every human line goes to stderr so `--json | jq` stays clean.
+  const log = json ? console.error : console.log;
   if (!input || !process.env.OPENROUTER_API_KEY) {
-    console.log("usage: OPENROUTER_API_KEY=... umless <video|audio> [--score]\n  Get a key at https://openrouter.ai/keys");
+    log("usage: OPENROUTER_API_KEY=... umless <video|audio> [--score] [--json]\n  Get a key at https://openrouter.ai/keys");
     process.exit(1);
   }
   const { duration, hasVideo } = await probe(input);
@@ -16,9 +20,11 @@ async function main() {
   await extractAudio(input, wav);
   const words = await transcribe(wav);
   const a = await analyze(words, duration);
-  console.log(`Um Score ${a.score}/100 · ${a.fillersPerMin} ums/min · ${a.repeatCount + a.retakeCount} stutters & retakes · ${a.deadAirSec}s dead air`);
-  console.log(words.map((w, i) => (a.cutIdx[i] ? `\x1b[9;31m${w.text}\x1b[0m` : w.text)).join(" "));
-  if (!flags.includes("--score")) {
+  log(`Um Score ${a.score}/100 · ${a.fillersPerMin} ums/min · ${a.repeatCount + a.retakeCount} stutters & retakes · ${a.deadAirSec}s dead air`);
+  log(words.map((w, i) => (a.cutIdx[i] ? `\x1b[9;31m${w.text}\x1b[0m` : w.text)).join(" "));
+  if (json) {
+    process.stdout.write(JSON.stringify(buildCutJson(a), null, 2) + "\n");
+  } else if (!flags.includes("--score")) {
     const out = `${base}.umless${hasVideo ? ".mp4" : ".m4a"}`;
     await renderCut(input, keepSegments(a), out, hasVideo);
     const d = (await probe(out)).duration;
