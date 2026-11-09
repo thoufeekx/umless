@@ -111,6 +111,24 @@ export function buildCutList(a: Analysis, input?: string): CutList {
   };
 }
 
+// The compact shape printed by `umless <file> --json` (#1). Times are seconds, as numbers.
+export type CutJson = {
+  duration: number;
+  score: number;
+  keep: Segment[];
+  cuts: { start: number; end: number; text: string; reason: string }[];
+};
+
+export function buildCutJson(a: Analysis): CutJson {
+  const cl = buildCutList(a);
+  return {
+    duration: cl.durationBefore,
+    score: cl.score,
+    keep: cl.keep,
+    cuts: cl.cuts.map(({ start, end, text, reason }) => ({ start, end, text, reason })),
+  };
+}
+
 export async function checkFfmpeg() {
   for (const bin of ["ffmpeg", "ffprobe"]) {
     const ok = await new Promise<boolean>((resolve) => {

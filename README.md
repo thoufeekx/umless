@@ -16,7 +16,10 @@ You need Node 20+, `ffmpeg` on your PATH and an [OpenRouter key](https://openrou
 export OPENROUTER_API_KEY=...
 npx -y github:thoufeekx/umless my-video.mp4          # writes my-video.umless.mp4
 npx -y github:thoufeekx/umless my-video.mp4 --score  # Um Score only, no render
+npx -y github:thoufeekx/umless my-video.mp4 --json   # cut list as JSON on stdout, no render
 ```
+
+`--json` prints `{ duration, score, keep: [{start,end}], cuts: [{start,end,text,reason}] }` with times in seconds. Log lines go to stderr, so `--json | jq .keep` works.
 
 The first run builds the CLI from GitHub, so it takes a minute; later runs are cached. (`npx umless` without the `github:` prefix will work once the package is on npm.) From a clone:
 
@@ -118,7 +121,6 @@ Most filler-word removers are closed. You can't see why a word was cut, and you 
 
 - `npx umless` on npm (today: `npx github:thoufeekx/umless`)
 - Timeline export (FCPXML / EDL) so you can finish in Premiere, Resolve, Final Cut or Kdenlive
-- A `--json` cut list on the CLI (the MCP server already returns one)
 - A local transcription option (whisper.cpp)
 
 Want one of these sooner? Open an issue or send a PR.
