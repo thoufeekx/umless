@@ -10,7 +10,7 @@ If Umless saves you an editing session, a ⭐ helps other people find it.
 
 ## Quick start
 
-You need Node 20+, `ffmpeg` on your PATH and an [OpenRouter key](https://openrouter.ai/keys). A 3-minute video costs about $0.02 in API calls.
+You need Node 20+, `ffmpeg` on your PATH and an [OpenRouter key](https://openrouter.ai/keys). A 3-minute video costs about $0.02 in API calls. No key? See [Run fully local](#run-fully-local-no-api-key).
 
 ```bash
 export OPENROUTER_API_KEY=...
@@ -26,6 +26,23 @@ npx tsx cli/umless.ts my-video.mp4
 ```
 
 The terminal prints an Um Score (ums per minute, stutters and retakes, seconds of dead air), your transcript with every cut word struck through, and the before/after length. Audio files work too and come out as `.m4a`.
+
+## Run fully local (no API key)
+
+Without `OPENROUTER_API_KEY` (or with `UMLESS_STT=local`), Umless transcribes on your machine with [whisper.cpp](https://github.com/ggml-org/whisper.cpp). It's free and the audio never leaves your computer. Set it up once:
+
+```bash
+bash scripts/setup-local-whisper.sh   # clones + builds whisper.cpp in ~/whisper.cpp, downloads ggml-base.en (148 MB) to ~/.cache/umless
+export UMLESS_WHISPER_BIN=~/whisper.cpp/build/bin/whisper-cli
+npx tsx cli/umless.ts my-video.mp4
+```
+
+The script needs git, a C/C++ compiler, cmake and curl. On macOS, `brew install whisper-cpp` also gives you `whisper-cli`. Other settings: `UMLESS_WHISPER_MODEL` (default `~/.cache/umless/ggml-base.en.bin`) and `UMLESS_WHISPER_THREADS` (default 4).
+
+What's different from the cloud path:
+
+- **No retake detection.** Spotting "sorry, let me say that again" needs a language model, so it only runs with an OpenRouter key. Ums, stutters/repeats and dead air are still cut.
+- **Fewer ums caught and looser cuts.** On our 39 s test take, local `base.en` found 8 of the 9 ums the cloud transcript found, and its word timings are less precise, so less dead air is removed: the take came out at 26.4 s locally vs 17.5 s with the cloud path (which also removes the retake).
 
 ## What it cuts
 
@@ -119,7 +136,6 @@ Most filler-word removers are closed. You can't see why a word was cut, and you 
 - `npx umless` on npm (today: `npx github:thoufeekx/umless`)
 - Timeline export (FCPXML / EDL) so you can finish in Premiere, Resolve, Final Cut or Kdenlive
 - A `--json` cut list on the CLI (the MCP server already returns one)
-- A local transcription option (whisper.cpp)
 
 Want one of these sooner? Open an issue or send a PR.
 

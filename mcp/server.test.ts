@@ -25,8 +25,11 @@ test("lists analyze_video and clean_video with their inputs", async () => {
 
 test("tool errors come back as isError results, not crashes", async () => {
   const saved = process.env.OPENROUTER_API_KEY;
+  const savedBin = process.env.UMLESS_WHISPER_BIN;
   try {
     delete process.env.OPENROUTER_API_KEY;
+    process.env.UMLESS_WHISPER_BIN = "/definitely/not/whisper-cli"; // no key and no local whisper
+
     const client = await connect();
     const r = (await client.callTool({ name: "analyze_video", arguments: { path: "nope.mp4" } })) as { isError?: boolean; content: { text: string }[] };
     assert.equal(r.isError, true);
@@ -40,5 +43,7 @@ test("tool errors come back as isError results, not crashes", async () => {
   } finally {
     if (saved === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = saved;
+    if (savedBin === undefined) delete process.env.UMLESS_WHISPER_BIN;
+    else process.env.UMLESS_WHISPER_BIN = savedBin;
   }
 });
