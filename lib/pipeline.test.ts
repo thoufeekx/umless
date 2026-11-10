@@ -1,7 +1,7 @@
 // Run with: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addMissedFillers, analyze, isFiller, keepSegments, withRetry, type Word } from "./pipeline";
+import { addMissedFillers, analyze, ffmpegMajor, filterScriptArgs, isFiller, keepSegments, withRetry, type Word } from "./pipeline";
 
 // 10 ms RMS frames: quiet room tone everywhere, loud where `loud` says.
 function level(seconds: number, loud: [number, number][]): number[] {
@@ -68,4 +68,13 @@ test("withRetry: retries dropped sockets and 5xx, not 4xx", async () => {
   assert.equal((await withRetry(bad, 3, 1)).status, 400);
   assert.equal(m, 1);
   await assert.rejects(withRetry(async () => { throw new TypeError("fetch failed"); }, 2, 1));
+});
+
+test("filter graph flag matches the installed ffmpeg", () => {
+  assert.equal(ffmpegMajor("ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023"), 6);
+  assert.equal(ffmpegMajor("ffmpeg version 7.0.2-static https://johnvansickle.com"), 7);
+  assert.equal(ffmpegMajor("ffmpeg version n7.1 Copyright"), 7);
+  assert.equal(ffmpegMajor("ffmpeg version N-117000-gabc123"), 7);
+  assert.deepEqual(filterScriptArgs(6, "g.txt"), ["-filter_complex_script", "g.txt"]);
+  assert.deepEqual(filterScriptArgs(7, "g.txt"), ["-/filter_complex", "g.txt"]);
 });
