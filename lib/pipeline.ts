@@ -38,6 +38,23 @@ export function run(cmd: string, args: string[]): Promise<string> {
   });
 }
 
+// ffmpeg 7 reads a filter graph from a file with `-/filter_complex FILE`; ffmpeg 6 (still the
+// default on Ubuntu 24.04 and Debian 12) only knows `-filter_complex_script FILE`.
+export function ffmpegMajor(versionOutput: string): number {
+  const m = versionOutput.match(/ffmpeg version n?(\d+)\./);
+  return m ? Number(m[1]) : 7; // git builds ("N-12345-g...") are recent: assume 7+
+}
+
+export function filterScriptArgs(major: number, graphFile: string): string[] {
+  return major >= 7 ? ["-/filter_complex", graphFile] : ["-filter_complex_script", graphFile];
+}
+
+let ffmpegMajorCache: Promise<number> | undefined;
+async function graphArgs(graphFile: string): Promise<string[]> {
+  ffmpegMajorCache ??= run("ffmpeg", ["-version"]).then(ffmpegMajor, () => 7);
+  return filterScriptArgs(await ffmpegMajorCache, graphFile);
+}
+
 export async function probe(file: string) {
   const out = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "json", file]);
   const j = JSON.parse(out);
@@ -341,7 +358,7 @@ export async function renderCut(input: string, rawSegs: Segment[], out: string, 
   parts.push(`${labels.join("")}concat=n=${segs.length}:v=${hasVideo ? 1 : 0}:a=1${hasVideo ? "[v]" : ""}[a]`);
   const graphFile = out + ".filter.txt";
   await fs.writeFile(graphFile, parts.join(";\n"));
-  const args = ["-y", "-loglevel", "error", "-i", input, "-/filter_complex", graphFile];
+  const args = ["-y", "-loglevel", "error", "-i", input, ...(await graphArgs(graphFile))];
   if (hasVideo) args.push("-map", "[v]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p");
   args.push("-map", "[a]", "-c:a", "aac", "-b:a", "192k", out);
   await run("ffmpeg", args);
@@ -498,7 +515,7 @@ export async function renderRevoice(
   await fs.writeFile(graphFile, parts.join(";\n"));
   const args = ["-y", "-loglevel", "error", "-i", input];
   pieces.forEach((p) => args.push("-i", p.audio!));
-  args.push("-/filter_complex", graphFile);
+  args.push(...(await graphArgs(graphFile)));
   if (hasVideo) args.push("-map", "[v]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p");
   args.push("-map", "[a]", "-c:a", "aac", "-b:a", "192k", out);
   await run("ffmpeg", args);
