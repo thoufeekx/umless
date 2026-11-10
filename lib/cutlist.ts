@@ -16,6 +16,7 @@ import {
   type Cut,
   type Segment,
 } from "./pipeline";
+import { checkLocalWhisper, useLocalStt } from "./whisper";
 
 export type CutType = "filler" | "repeat" | "retake" | "silence";
 export type CutEntry = {
@@ -126,8 +127,16 @@ export async function checkFfmpeg() {
 }
 
 async function preflight(input: string) {
-  if (!process.env.OPENROUTER_API_KEY)
-    throw new Error("OPENROUTER_API_KEY is not set. Get a key at https://openrouter.ai/keys (a 3-minute video costs about $0.02).");
+  // No key (or UMLESS_STT=local): transcribe locally with whisper.cpp, so make sure it is installed.
+  if (useLocalStt()) {
+    try {
+      await checkLocalWhisper();
+    } catch (e) {
+      throw new Error(
+        `Local transcription is not available (used when OPENROUTER_API_KEY is unset or UMLESS_STT=local).\n${(e as Error).message}`,
+      );
+    }
+  }
   await checkFfmpeg();
   const file = path.resolve(input);
   const st = await fs.stat(file).catch(() => null);

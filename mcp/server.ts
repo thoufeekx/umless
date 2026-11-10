@@ -34,7 +34,7 @@ export function createServer() {
     {
       title: "Analyze a video for ums, stutters, retakes and dead air",
       description:
-        "Transcribes a local video or audio file and returns the cut list Umless would apply, without rendering anything: every filler word (um, uh), stutter/repeated phrase, retake/false start and long silence, each with start/end timestamps in seconds and a reason, plus the kept segments, an Um Score (0-100) and the before/after duration. Use it to preview or explain edits before calling clean_video. Needs ffmpeg and OPENROUTER_API_KEY; costs about $0.02 per 3 minutes of audio.",
+        "Transcribes a local video or audio file and returns the cut list Umless would apply, without rendering anything: every filler word (um, uh), stutter/repeated phrase, retake/false start and long silence, each with start/end timestamps in seconds and a reason, plus the kept segments, an Um Score (0-100) and the before/after duration. Use it to preview or explain edits before calling clean_video. Needs ffmpeg plus either OPENROUTER_API_KEY (cloud transcription, about $0.02 per 3 minutes of audio) or a local whisper.cpp install (free; no retake detection).",
       inputSchema: {
         path: z.string().describe("Path to a local video or audio file (absolute, or relative to the server's working directory)"),
         retakes: z.boolean().optional().describe("Also ask an LLM to find retakes and false starts (default true)"),
@@ -56,7 +56,7 @@ export function createServer() {
     {
       title: "Cut ums, stutters, retakes and dead air out of a video",
       description:
-        "Renders a cleaned copy of a local talking-head video or audio file with filler words, stutters, retakes and long pauses removed (cuts snap to silence, with short fades so there are no clicks). The original is never modified. Returns the output path, before/after duration, seconds saved, Um Score, counts of what was cut, and the full cut list. Video comes out as .mp4, audio as .m4a. Needs ffmpeg and OPENROUTER_API_KEY.",
+        "Renders a cleaned copy of a local talking-head video or audio file with filler words, stutters, retakes and long pauses removed (cuts snap to silence, with short fades so there are no clicks). The original is never modified. Returns the output path, before/after duration, seconds saved, Um Score, counts of what was cut, and the full cut list. Video comes out as .mp4, audio as .m4a. Needs ffmpeg plus either OPENROUTER_API_KEY or a local whisper.cpp install.",
       inputSchema: {
         path: z.string().describe("Path to a local video or audio file"),
         out: z.string().optional().describe("Output path (default: <input>.umless.mp4 next to the input, or .m4a for audio)"),

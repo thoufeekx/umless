@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { FILLERS, isFiller, norm, umScore } from "./score";
+import { useLocalStt, whisperWords } from "./whisper";
 
 export { isFiller, umScore };
 
@@ -110,7 +111,16 @@ async function sttWords(wav: string, model: string): Promise<Word[]> {
     .map(({ word, start, end }) => ({ text: word.trim(), start, end }));
 }
 
+// UMLESS_STT=local, or no OPENROUTER_API_KEY at all, transcribes on this machine with whisper.cpp (free).
 export async function transcribe(wav: string): Promise<Word[]> {
+  if (useLocalStt()) {
+    console.error(
+      process.env.OPENROUTER_API_KEY
+        ? "umless: running local transcription (whisper.cpp, UMLESS_STT=local)"
+        : "umless: OPENROUTER_API_KEY not set, running local transcription (whisper.cpp); retake detection is off",
+    );
+    return tightenToSpeech(await whisperWords(wav), frameRms(await readPcm(wav)));
+  }
   const useHints = FILLER_MODEL && FILLER_MODEL !== "off";
   const [words, hints] = await Promise.all([
     sttWords(wav, STT_MODEL),
@@ -131,10 +141,7 @@ const HINT_MIN_RUN = 0.08;
 // loud run, never of the hint. So a hint can never cause a real word to be cut.
 export function addMissedFillers(words: Word[], hints: Word[], rms: number[]): Word[] {
   if (!rms.length) return words;
-  const sorted = [...rms].sort((a, b) => a - b);
-  const pct = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] + 1e-3;
-  const floor = pct(0.1);
-  const thr = floor * Math.sqrt(pct(0.7) / floor); // halfway (in dB) between room tone and typical speech
+  const thr = speechThreshold(rms);
   const content = words.filter((w) => !isFiller(w.text)).sort((a, b) => a.start - b.start);
   const known = words.filter((w) => isFiller(w.text)).map((w) => (w.start + w.end) / 2);
   const gaps: [number, number][] = [];
@@ -166,6 +173,38 @@ export function addMissedFillers(words: Word[], hints: Word[], rms: number[]): W
     known.push((best.s + best.e) / 2);
   }
   return [...words, ...added].sort((a, b) => a.start - b.start);
+}
+
+// RMS level halfway (in dB) between room tone and typical speech.
+function speechThreshold(rms: number[]): number {
+  const sorted = [...rms].sort((a, b) => a - b);
+  const pct = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] + 1e-3;
+  const floor = pct(0.1);
+  return floor * Math.sqrt(pct(0.7) / floor);
+}
+
+// Whisper's word timings run from one word straight into the next, so pauses hide inside words and dead air is
+// never found. Shrink each word to the loud audio inside its own span (words with no loud frame are left as is).
+// "Loud" here is at least 26 dB under loud speech, so a near-silent (or digitally silent) room tone can't count.
+export function tightenToSpeech(words: Word[], rms: number[], pad = 0.03): Word[] {
+  if (!rms.length) return words;
+  const sorted = [...rms].sort((a, b) => a - b);
+  const thr = Math.max(speechThreshold(rms), 0.05 * sorted[Math.floor(0.9 * (sorted.length - 1))]);
+  return words.map((w) => {
+    const i0 = Math.max(0, Math.floor(w.start / FRAME));
+    const i1 = Math.min(rms.length, Math.ceil(w.end / FRAME));
+    let a = -1;
+    let b = -1;
+    for (let i = i0; i < i1; i++) {
+      if (rms[i] <= thr) continue;
+      if (a < 0) a = i;
+      b = i;
+    }
+    if (a < 0) return w;
+    const start = Math.max(w.start, a * FRAME - pad);
+    const end = Math.min(w.end, (b + 1) * FRAME + pad);
+    return end - start >= 0.05 ? { ...w, start, end } : w;
+  });
 }
 
 // Runs of frames above `thr` between times a and b, bridging dips of up to 30 ms.

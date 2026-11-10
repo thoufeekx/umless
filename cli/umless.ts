@@ -1,15 +1,22 @@
 #!/usr/bin/env -S npx tsx
-// Open-source Umless CLI: cut ums, stutters, retakes and dead air from any video. Bring your own OpenRouter key (about $0.02 per 3-minute video).
+// Open-source Umless CLI: cut ums, stutters, retakes and dead air from any video. Bring your own OpenRouter key (about $0.02 per 3-minute video),
+// or run fully local with whisper.cpp (no key).
 // Re-voicing in your own voice lives in the hosted app: https://umless.app
 import path from "node:path";
 import { analyze, extractAudio, keepSegments, probe, renderCut, transcribe } from "../lib/pipeline";
+import { checkLocalWhisper, useLocalStt } from "../lib/whisper";
 
 async function main() {
   const [input, ...flags] = process.argv.slice(2);
-  if (!input || !process.env.OPENROUTER_API_KEY) {
-    console.log("usage: OPENROUTER_API_KEY=... umless <video|audio> [--score]\n  Get a key at https://openrouter.ai/keys");
+  if (!input) {
+    console.log(
+      "usage: umless <video|audio> [--score]\n" +
+        "  With OPENROUTER_API_KEY set (https://openrouter.ai/keys): cloud transcription + retake detection.\n" +
+        "  Without it (or UMLESS_STT=local): free local transcription with whisper.cpp.",
+    );
     process.exit(1);
   }
+  if (useLocalStt()) await checkLocalWhisper();
   const { duration, hasVideo } = await probe(input);
   const base = input.replace(/\.[^.]+$/, "");
   const wav = `${base}.umless.wav`;
