@@ -8,7 +8,8 @@ async function main() {
     await startStdio();
     return;
   }
-  if (process.argv[2] && !process.argv[2].startsWith("-")) await checkFfmpeg();
+  // `umless doctor` reports a missing ffmpeg itself instead of failing up front.
+  if (process.argv[2] && !process.argv[2].startsWith("-") && process.argv[2] !== "doctor") await checkFfmpeg();
   await import("../cli/umless");
 }
 

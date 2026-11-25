@@ -5,6 +5,7 @@ All notable changes to Umless are listed here. The format follows [Keep a Change
 ## [Unreleased]
 
 ### Added
+- `umless doctor [--json]`: a ✓/✗ checklist of ffmpeg (with version), OPENROUTER_API_KEY (never printed), local whisper.cpp and the temp dir; exits 1 when something needed is missing (#17).
 - MCP server (`umless mcp`, stdio) with `analyze_video` (cut list JSON with timestamps and reasons) and `clean_video` (renders, returns output path and stats).
 - Claude Code skill (`skills/umless`) and plugin marketplace manifest (`.claude-plugin/`).
 - Runnable with `npx github:thoufeekx/umless`: `bin` entry, tsup build to `dist/`, `files` field, ffmpeg check with install hints (#3).

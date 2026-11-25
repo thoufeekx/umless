@@ -16,6 +16,7 @@ You need Node 20+, `ffmpeg` on your PATH and an [OpenRouter key](https://openrou
 export OPENROUTER_API_KEY=...
 npx -y github:thoufeekx/umless my-video.mp4          # writes my-video.umless.mp4
 npx -y github:thoufeekx/umless my-video.mp4 --score  # Um Score only, no render
+npx -y github:thoufeekx/umless doctor               # check ffmpeg, key / whisper.cpp and temp dir (--json for agents)
 ```
 
 The first run builds the CLI from GitHub, so it takes a minute; later runs are cached. (`npx umless` without the `github:` prefix will work once the package is on npm.) From a clone:

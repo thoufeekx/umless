@@ -3,14 +3,23 @@
 // or run fully local with whisper.cpp (no key).
 // Re-voicing in your own voice lives in the hosted app: https://umless.app
 import path from "node:path";
+import { doctorLines, doctorOk, runDoctor } from "../lib/doctor";
 import { analyze, extractAudio, keepSegments, probe, renderCut, transcribe } from "../lib/pipeline";
 import { checkLocalWhisper, useLocalStt } from "../lib/whisper";
 
+async function doctor(json: boolean) {
+  const report = await runDoctor();
+  console.log(json ? JSON.stringify(report) : doctorLines(report).join("\n"));
+  process.exit(doctorOk(report) ? 0 : 1);
+}
+
 async function main() {
+  if (process.argv[2] === "doctor") return doctor(process.argv.includes("--json"));
   const [input, ...flags] = process.argv.slice(2);
   if (!input) {
     console.log(
       "usage: umless <video|audio> [--score]\n" +
+        "       umless doctor [--json]   check ffmpeg, transcription (key or whisper.cpp) and the temp dir\n" +
         "  With OPENROUTER_API_KEY set (https://openrouter.ai/keys): cloud transcription + retake detection.\n" +
         "  Without it (or UMLESS_STT=local): free local transcription with whisper.cpp.",
     );
